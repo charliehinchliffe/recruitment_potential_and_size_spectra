@@ -1,4 +1,4 @@
-# recruitment_potential_and_size_spectra
+# Rapid inference of larval fish recruitment potential from size spectrum models
 This repository contains all the data and code used in the manuscript:
 
 * Title: "Rapid inference of larval fish recruitment potential from size spectrum models"
