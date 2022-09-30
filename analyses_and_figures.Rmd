@@ -1,0 +1,1870 @@
+---
+title: "Analysis and results of Hinchlife et al. (XXXX)"
+author: "Charles Hinchliffe"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+
+# Packages
+```{r}
+library(tidyverse)
+library(vegan)
+library(see)
+library(patchwork)
+
+library(sizedist)
+library(rstan)
+
+library(nlstools)
+library(FSA)
+source("R/agesurv_no_rounding.R")
+
+```
+
+# Functions
+```{r}
+#Data generation and manipulation functions
+source("R/generate_sample.R")
+source("R/create_bins.R")
+source("R/create_size_data_bins.R")
+source("R/getmode.R")
+
+#Data generation and manipulation functions
+source("R/generate_sample.R")
+
+#agesurv funtion from 'fishmethods' with decimal rounding removed
+source("R/agesurv_no_rounding.R")
+
+
+#Plotting functions
+source("R/element_textbox.R")
+
+#RMSE estimates
+RMSE <- function(m, o){
+  sqrt(mean((m - o)^2))
+}
+
+```
+
+# Plot palettes
+```{r}
+pal_1 <- c("#001eff",
+           "#150549",
+           "#f000ff")
+
+pal_1_1 <- c("#150549",
+           "#f000ff")
+
+
+pal_2_1 <- c("#f000ff",
+           "#ffe700",
+           "#ff4d00",
+           "#00ecff")
+
+pal_3 <- c("#001eff",
+           "#f000ff",
+           "#ffe700",
+           "#ff4d00",
+           "#00ecff",
+           "#4ffd3c")
+
+
+pal_3_1 <- c("#f000ff",
+           "#ffe700",
+           "#ff4d00",
+           "#00ecff",
+           "#4ffd3c")
+
+pal_4 <- c("#4ffd3c",
+           "#f000ff",
+           "#ffe700",
+           "#ff4d00",
+           "#00ecff"
+           )
+```
+
+# Load Models
+```{r}
+#size distribution model and growth
+ret_size <- stan_model(file="stan/simple_weight_model.stan")
+
+ret_abund <- stan_model(file="stan/abundance_slope.stan")
+```
+
+# Section 1: Biomas trajectory - Fig 1.
+
+This code reproduced data and plots Fig. 1.
+```{r, eval = FALSE}
+# Make data frame with initial values
+t <- seq(0,15,0.01)
+z <- 0.15*sin(t) + 0.25
+g <- 0.15*sin(t+2.5) + 0.25
+  
+output_data <- cbind(t,z,g) %>%  as.data.frame()
+
+output_data$RP <- output_data$z/output_data$g
+
+
+tryCatch(
+for(i in seq_len(nrow(output_data))){
+
+# generate data  
+data <- simulate_catch_data(R = 500,
+                            s0_av = 0.1,
+                            log10s0_sd = 0,
+                            g_av = output_data$g[i],
+                            log10g_sd = 0.01,
+                            z_av = output_data$z[i], 
+                            log10z_sd = 0,
+                            growth_in_weight = TRUE)
+
+# create bins
+data2 <- create_bins(data,
+                     bin_width_age = 1,
+                     bin_width_size = 0.05)
+
+# extract biomass for each age group
+bio_data <- data2 %>% 
+  group_by(age_bin) %>% 
+  mutate(total_size_bin = sum(size_bin)) %>% 
+  select(age_bin, total_size_bin) %>% 
+  unique() %>% 
+  filter(age_bin == 5 | age_bin == 15)
+
+output_data$age_5[i] <- as.numeric(bio_data[2,2])
+
+output_data$age_15[i] <- as.numeric(bio_data[1,2])
+
+output_data$ratio[i] <- as.numeric(bio_data[1,2]/bio_data[2,2])
+
+}, error=function(e) e
+)
+
+
+output_data
+
+```
+
+Plot
+```{r}
+output_data <- readRDS("output/simulations_biomass_ratio_age15toage5.rds")
+
+Fig_1 <- ggplot(output_data, aes(RP, ratio)) +
+  geom_point2(size = 2) +
+  scale_x_log10() +
+  scale_y_log10() +
+  ylab('Age15:Age5 Biomass Ratio') +
+  xlab(expression(bar(z)/bar(g))) + 
+  geom_hline(yintercept = 1, color = "red", size=0.5, alpha = 0.5) +
+  geom_vline(xintercept = 1, color = "red", size=0.5, alpha = 0.5) +
+  theme_bw()+
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none")
+  
+Fig_1
+```
+
+# Section 2: Varying growth and mortality
+This code reproduces varying growth and mortality analyses and plots Fig 2.
+
+```{r}
+t <- seq(0,15,0.25)
+
+v <- 0.15*sin(t) + 0.25
+offv <- 0.15*sin(t+2.5) + 0.25
+
+y <- (v)#M
+y2 <- (offv) #G
+y3 <- log(y/y2) #M/G
+
+plot(y~t, ylim=c(-1.5, 1.5))
+lines(y~t, col = "green")
+lines(y2~t, col = "red")
+lines(y3~t, col = "blue")
+```
+
+Run models
+```{r, eval = FALSE}
+
+#Make data frame with initial values
+t <- seq(0,15,0.25)
+z <- 0.15*sin(t) + 0.25
+g <- 0.15*sin(t+2.5) + 0.25
+
+output_data <- cbind(t,z,g) %>%  as.data.frame()
+
+output_data2 <- cbind(t,z,g) %>%  as.data.frame()
+
+output_data3 <- cbind(t,z,g) %>%  as.data.frame()
+
+
+output_data <- rbind.data.frame(output_data, output_data2, output_data3)
+
+
+tryCatch(
+for(i in seq_len(nrow(output_data))){
+
+#generate data  
+data <- simulate_catch_data(R = 500,
+                            s0_av = 0.1,
+                            log10s0_sd = 0,
+                            g_av = output_data$g[i],
+                            log10g_sd = 0.01,
+                            z_av = output_data$z[i], 
+                            log10z_sd = 0,
+                            growth_in_weight = TRUE)
+
+data_binned <- create_size_data_bins(data = data,
+                                   bin_width_size = 0.05)
+
+
+size_data <- summarise_bin_counts(data_binned,
+                                  size_sampled,
+                                  0.05)
+
+data2 <- create_bins(data_binned,
+                     bin_width_age = 1,
+                     bin_width_size = 0.05)
+
+age_data <- sample_n(data2, size = 300)
+
+ 
+data_for_stan_size_growth <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data),
+
+   
+    # data for length age estimates
+    N_growth = nrow(age_data),
+    age = age_data$age_bin,
+    size_ind = age_data$size_bin
+  )
+
+data_for_NASS <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data)
+  )
+
+
+# Now fit stan model
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3)
+
+print(fit_size, probs=c(0.025, 0.5, 0.975))
+
+output_data$size_Z[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g[i] <- mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0[i] <- mean(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+
+# fit abund model
+
+fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
+
+
+print(fit_abund, probs=c(0.025, 0.5, 0.975))
+
+output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+# fit Catch curve and nls
+nls_data <- list(age = age_data$age_bin,
+    size_ind = age_data$size_bin)
+
+
+start <- list(W0 = 0.01 , g = 0.5)  ### setting start parameters from above
+
+power <- size_ind ~ W0 * exp(age*g)  ### Growth equation
+
+
+fit <- nls(power, data = nls_data, start = start, control = list(maxiter = 1000), trace = TRUE) 
+
+
+coef(fit)[1]
+coef(fit)[2]
+
+modal_age <-  getmode(data2$age_bin)
+
+catch_dat <- data_binned %>% 
+  count(age_day = round(age, 0)) %>% 
+  subset(age_day >= modal_age)
+  
+
+catch2 <- lm(log(n) ~ age_day, data = catch_dat)
+summary(catch2)
+
+output_data$LM_M[i] <- -as.numeric(coef(catch2)[2])
+output_data$LM_G[i] <- as.numeric(coef(fit)[2])
+output_data$LM_MG[i] <- output_data$LM_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+wlr <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "wlr")
+
+output_data$wlr_M[i] <- as.numeric(wlr$`results`[3])
+output_data$wlr_MG[i] <- output_data$wlr_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+crcb <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "crcb")
+
+output_data$crcb_M[i] <- as.numeric(crcb$`results`[3])
+output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
+
+}, error=function(e) e
+)
+
+output_data
+```
+
+Plot output
+
+```{r}
+output_data <- readRDS("output/simulations_sine_function.rds")
+
+output_data2 <- output_data
+
+
+
+output_data2$RP <- output_data2$z/output_data2$g
+output_data2$logRP <- log(output_data2$RP)
+output_data2$abund_RP <- (output_data2$mean_b)-1
+
+output_data2 <- output_data2 %>% 
+  select("t", "z", "g", "RP", "logRP", "size_Z", "size_g",  "size_RP",  "abund_RP", "LM_MG", "LM_M", "LM_G", "wlr_M", "wlr_MG", "crcb_M", "crcb_MG")
+
+output_data2$set_z <- output_data2$z
+output_data2$set_g <- output_data2$g
+output_data2$set_RP <- output_data2$RP
+
+keycol <- "model"
+valuecol <- "estimate"
+gathercols <- c("z", "g", "RP", "logRP", "size_Z", "size_g",  "size_RP",  "abund_RP", "LM_MG", "LM_M", "LM_G", "wlr_M", "wlr_MG", "crcb_M", "crcb_MG")
+#gathercols <- c("RP", "size_Z", "size_g",  "size_RP",  "abund_RP", "LM_MG", "LM_M", "LM_G")
+
+data_long <- gather_(output_data2, keycol, valuecol, gathercols)
+
+# metric category
+data_long$metric <- NA
+
+data_long$metric[data_long$model == "z"] <- "Mortality"
+data_long$metric[data_long$model == "size_Z"] <- "Mortality"
+data_long$metric[data_long$model == "LM_M"] <- "Mortality"
+data_long$metric[data_long$model == "wlr_M"] <- "Mortality"
+data_long$metric[data_long$model == "crcb_M"] <- "Mortality"
+
+data_long$metric[data_long$model == "g"] <- "Growth"
+data_long$metric[data_long$model == "size_g"] <- "Growth"
+data_long$metric[data_long$model == "LM_G"] <- "Growth"
+
+data_long$metric[data_long$model == "logRP"] <- "log(Z/G)"
+
+data_long$metric[data_long$model == "RP"] <- "Potential"
+data_long$metric[data_long$model == "size_RP"] <- "Potential"
+data_long$metric[data_long$model == "abund_RP"] <- "Potential"
+data_long$metric[data_long$model == "LM_MG"] <- "Potential"
+data_long$metric[data_long$model == "wlr_MG"] <- "Potential"
+data_long$metric[data_long$model == "crcb_MG"] <- "Potential"
+
+# method
+data_long$method <- NA
+
+data_long$method[data_long$model == "z"] <- "Real"
+data_long$method[data_long$model == "size_Z"] <- "Sizedist"
+data_long$method[data_long$model == "LM_M"] <- "Catch Curve"
+data_long$method[data_long$model == "wlr_M"] <- "weighted Catch Curve"
+data_long$method[data_long$model == "crcb_M"] <- "Chapman Robson"
+
+data_long$method[data_long$model == "g"] <- "Real"
+data_long$method[data_long$model == "size_g"] <- "Sizedist"
+data_long$method[data_long$model == "LM_G"] <- "Least Squares"
+
+data_long$method[data_long$model == "logRP"] <- "Real"
+data_long$method[data_long$model == "RP"] <- "Real"
+data_long$method[data_long$model == "size_RP"] <- "Sizedist"
+data_long$method[data_long$model == "abund_RP"] <- "Abudance Spectra"
+data_long$method[data_long$model == "LM_MG"] <- "Catch Curve"
+data_long$method[data_long$model == "wlr_MG"] <- "weighted Catch Curve"
+data_long$method[data_long$model == "crcb_MG"] <- "Chapman Robson"
+
+data_long <- data_long %>% mutate(method = factor(method, levels=c("Real", "Least Squares", "Sizedist", "Catch Curve", "weighted Catch Curve", "Chapman Robson", "Abudance Spectra")))
+
+mort_data <- subset(data_long, data_long$metric == "Mortality")
+
+growth_data <- subset(data_long, data_long$metric == "Growth")
+
+RP_data <- subset(data_long, data_long$metric == "Potential")
+```
+
+
+### Fig. 2: varying growth and mortality
+```{r}
+
+
+growth_plot <- growth_data %>% ggplot(aes(t, estimate , col = method)) +
+  geom_point2(size = 3, alpha = 0.5) +
+  geom_smooth(method = "loess", span = 0.05, se = F, alpha = 0.7) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "none") +
+  xlab("Step") +
+  #ylab(bquote(~bar(g)~"(mg mg"^-1*" d"^-1*")")) +
+  ylab(bquote(bar(g))) +
+  ggtitle("A") +
+  scale_color_manual(values =  pal_1) 
+
+
+mort_plot <- mort_data %>% ggplot(aes(t, estimate , col = method)) +
+  geom_point2(size = 3, alpha = 0.5) +
+  geom_smooth(method = "loess", span = 0.05, se = F, alpha = 0.7) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "none") +
+  xlab("Step") +
+  #ylab(bquote(~bar(z)~"(d"^-1*")")) +
+  ylab(bquote(bar(z))) +
+  ggtitle("B") +
+  scale_color_manual(values =  pal_2) 
+
+
+RP_plot <- RP_data %>% ggplot(aes(t, estimate , col = method)) +
+  geom_point2(size = 3, alpha = 0.5) +
+  geom_smooth(method = "loess", span = 0.05, se = F, alpha = 0.7) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "bottom") +
+  xlab("Step") +
+  ylab(expression(bar(z)/bar(g))) +
+  ggtitle("C") +
+  scale_color_manual(values =  pal_3) +
+  scale_y_log10() +
+  geom_hline(yintercept=1, linetype = "dashed", color = "black", size=0.5, alpha = 0.5) 
+
+
+
+Fig_2 <- (growth_plot | mort_plot) / RP_plot
+
+Fig_2
+```
+
+
+corr plot
+```{r}
+
+growth_data2 <- growth_data %>%  subset(method != "Real")
+
+mort_data2 <- mort_data %>%  subset(method != "Real")
+
+RP_data2 <- RP_data %>%  subset(method != "Real")
+
+
+cor_growth_plot <- growth_data2 %>% ggplot(aes(set_g, estimate , col = method)) + 
+  geom_abline(intercept = 0, slope = 1, linetype="dashed")+
+  geom_point2(size = 3, alpha = 0.5) +
+  geom_smooth(method = "lm", se = F) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
+  ylab(bquote(bar(g))) +
+  xlab(bquote("Set "~bar(g)~"")) +
+  ggtitle("A") +
+  scale_color_manual(values =  pal_1_1)
+
+cor_mort_plot <- mort_data2 %>% ggplot(aes(set_z, estimate , col = method)) + 
+  geom_abline(intercept = 0, slope = 1, linetype="dashed") +
+  geom_point2(size = 3, alpha = 0.5) +
+  geom_smooth(method = "lm", se = F) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
+  ylab(expression(bar(z))) +
+  xlab(expression("Set "~bar(z)~"")) +
+  ggtitle("C") +
+  scale_color_manual(values =  pal_2_1)
+
+
+cor_RP_plot <- RP_data2 %>% ggplot(aes(set_RP, estimate , col = method)) + 
+  geom_abline(intercept = 0, slope = 1, linetype="dashed") +
+  geom_point2(size = 3, alpha = 0.5) +
+  geom_smooth(method = "lm", se = F) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
+  xlab(expression(~"Set "~bar(z)/bar(g))) +
+  ylab(expression(bar(z)/bar(g))) +
+  ggtitle("E") +
+  scale_color_manual(values =  pal_3_1) +
+  scale_x_log10() +
+  scale_y_log10()
+
+
+cor_growth_plot / cor_mort_plot / cor_RP_plot
+```
+
+### res plot
+```{r}
+res_growth_plot <- growth_data2 %>% ggplot(aes(set_g, estimate-set_g , col = method)) + 
+  geom_abline(intercept = 0, slope = 0, linetype="dashed")+
+  geom_point2(size = 3, alpha = 0.5) +
+  geom_smooth(method = "lm", se = F) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
+  ylab(bquote(~bar(g)~'-Set value')) +
+  xlab(bquote("Set "~bar(g)~"")) +
+  ggtitle("B") +
+  scale_color_manual(values =  pal_1_1)
+
+res_mort_plot <- mort_data2 %>% ggplot(aes(set_z, estimate-set_z , col = method)) + 
+  geom_abline(intercept = 0, slope = 0, linetype="dashed") +
+  geom_point2(size = 3, alpha = 0.5) +
+  geom_smooth(method = "lm", se = F) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
+  ylab(bquote(~bar(z)~'-Set value')) +
+  xlab(expression("Set "~bar(z)~"")) +
+  ggtitle("D") +
+  scale_color_manual(values =  pal_2_1)
+
+res_RP_plot <- RP_data2 %>% ggplot(aes(set_RP, estimate-set_RP , col = method)) + 
+  geom_abline(intercept = 0, slope = 0, linetype="dashed") +
+  geom_point2(size = 3, alpha = 0.5) +
+  geom_smooth(method = "lm", se = F) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "bottom") +
+  xlab(expression(~"Set "~bar(z)/bar(g))) +
+  ylab(bquote(~bar(z)/bar(g)~'-Set value')) +
+  ggtitle("F") +
+  scale_color_manual(values =  pal_3_1) +
+  scale_x_log10()
+
+
+res_growth_plot / res_mort_plot / res_RP_plot
+```
+
+### Fig 3. Correlation plots
+```{r}
+Fig_3 <-(cor_growth_plot | res_growth_plot) / (cor_mort_plot | res_mort_plot) / (cor_RP_plot | res_RP_plot)
+
+
+Fig_3
+```
+
+
+# Section 3: Sensitivity Analysis
+
+This section reproduces sensitivity analysis, and plot Fig 4.
+
+## R sensitivity
+
+```{r}
+
+hatches_per_day <- c(rep(10, times = 500),
+                     rep(20, times = 500),
+                     rep(50, times = 500),
+                     rep(100, times = 500),
+                     rep(200, times = 500),
+                     rep(500, times = 500)
+                     )
+
+output_data <- as.data.frame(hatches_per_day)
+
+hatches_per_day
+
+
+tryCatch(
+for(i in seq_len(nrow(output_data))){
+
+#generate data  
+data <- simulate_catch_data(R = output_data$hatches_per_day[i],
+                            s0_av = 0.1,
+                            log10s0_sd = 0,
+                            g_av = 0.21,
+                            log10g_sd = 0.01,
+                            z_av = 0.21, 
+                            log10z_sd = 0,
+                            growth_in_weight = TRUE)
+
+data_binned <- create_size_data_bins(data = data,
+                                   bin_width_size = 0.05)
+
+
+size_data <- summarise_bin_counts(data_binned,
+                                  size_sampled,
+                                  0.05)
+
+data2 <- create_bins(data_binned,
+                     bin_width_age = 1,
+                     bin_width_size = 0.05)
+
+age_data <- sample_n(data2, size = nrow(data2)*0.3)
+
+ 
+data_for_stan_size_growth <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data),
+
+   
+    # data for length age estimates
+    N_growth = nrow(age_data),
+    age = age_data$age_bin,
+    size_ind = age_data$size_bin
+  )
+
+data_for_NASS <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data)
+  )
+
+
+# Now fit stan model
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3)
+
+print(fit_size, probs=c(0.025, 0.5, 0.975))
+
+output_data$size_Z[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g[i] <- mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0[i] <- mean(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+
+# fit abund model
+
+fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
+
+
+print(fit_abund, probs=c(0.025, 0.5, 0.975))
+
+output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+# fit Catch curve and nls
+nls_data <- list(age = age_data$age_bin,
+    size_ind = age_data$size_bin)
+
+
+start <- list(W0 = 0.01 , g = 0.5)  ### setting start parameters from above
+
+power <- size_ind ~ W0 * exp(age*g)  ### Growth equation
+
+
+fit <- nls(power, data = nls_data, start = start, control = list(maxiter = 1000), trace = TRUE) 
+
+
+#coef(fit)[1]
+#coef(fit)[2]
+
+modal_age <-  getmode(data2$age_bin)
+
+catch_dat <- data_binned %>% 
+  count(age_day = round(age, 0)) %>% 
+  subset(age_day >= modal_age)
+  
+
+catch2 <- lm(log(n) ~ age_day, data = catch_dat)
+summary(catch2)
+
+output_data$LM_M[i] <- -as.numeric(coef(catch2)[2])
+output_data$LM_G[i] <- as.numeric(coef(fit)[2])
+output_data$LM_MG[i] <- output_data$LM_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+wlr <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "wlr")
+
+output_data$wlr_M[i] <- as.numeric(wlr$`results`[3])
+output_data$wlr_MG[i] <- output_data$wlr_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+crcb <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "crcb")
+
+output_data$crcb_M[i] <- as.numeric(crcb$`results`[3])
+output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
+
+}, error=function(e) e
+)
+
+output_data
+
+```
+
+Read output 
+```{r}
+output_data <- readRDS("output/simulations_R_variation2.rds")
+```
+
+Make long format data
+```{r}
+output_data2 <- output_data
+
+output_data2$abund_RP <- (output_data2$mean_b)-1
+
+data_plotting <- output_data2 %>% select(hatches_per_day, size_RP, abund_RP, LM_MG, wlr_MG, crcb_MG)
+
+keycol <- "model"
+valuecol <- "estimate"
+gathercols <- c("size_RP", "abund_RP", "LM_MG", "wlr_MG", "crcb_MG")
+
+data_long <- gather_(data_plotting, keycol, valuecol, gathercols)
+
+head(data_long)
+
+data <- data_long %>% mutate(model = factor(model, levels=c("abund_RP","size_RP", "LM_MG", "wlr_MG", "crcb_MG")))
+```
+
+summary table
+```{r}
+
+summary_table <- data %>% 
+  mutate(Mod_hatch = paste(data$model,"_", data$hatches_per_day)) %>% 
+  group_by(Mod_hatch) %>% 
+  mutate(log_est = log(estimate)) %>% 
+  summarise(Model = model,
+            R = hatches_per_day,
+            n = n(),
+         mean = mean(log_est),
+         sd = sd(log_est),
+         cv = sd(log_est)/mean(log_est),
+         rm2e = RMSE(log_est, 0),
+         unlogged_mean = mean(estimate)
+         ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  select(Model, R, n, mean, sd, cv, rm2e, unlogged_mean) %>% #, unlogged_mean
+  arrange(R) %>% 
+  arrange(Model)
+
+
+summary_table #%>% subset(R >= 100)
+
+R_sum <- summary_table %>% 
+  group_by(Model)%>%
+  mutate(Mu = mean) %>% 
+  summarise(Model = Model,
+            mu = round(mean(Mu),3),
+            mu_min = round(min(Mu),3),
+            mu_max = round(max(Mu),3),
+            RM2E = round(mean(rm2e),3),
+            RM2E_min = round(min(rm2e),3),
+            RM2E_max = round(max(rm2e),3)
+            ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  select(Model, mu, mu_min, mu_max, RM2E, RM2E_min, RM2E_max) %>%
+  arrange(Model) 
+  
+R_sum
+```
+
+R plot
+```{r}
+
+R_plot <- ggplot(data, aes(x = model, y = estimate, fill = model, group = model)) +
+  geom_violin(draw_quantiles = c(0.25, 0.5, 0.75), trim = FALSE) +
+  geom_hline(yintercept=1, color = "red", size=0.5, alpha = 0.5) +
+  theme_bw() +
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none")+
+  theme(plot.title = element_textbox(color = "black", hjust = 0.5, margin = margin(t = 3, b = 3), face = "italic")) +
+  scale_fill_manual(values =  pal_4) +
+  ylab(expression(bar(z)/bar(g))) +
+  facet_wrap(~hatches_per_day, nrow = 1, ncol = 7) + labs(title = "R") + 
+  scale_y_log10(limits = c(0.1, 3),breaks = c(0.2, 0.4, 0.6, 0.8, 1,1.5, 2,2.5, 3)) 
+
+R_plot
+```
+
+
+## Z sensitivity 
+
+```{r}
+
+variance <- c(rep(0, times = 500),
+              rep(0.005, times = 500),
+              rep(0.01, times = 500),
+              rep(0.02, times = 500),
+              rep(0.03, times = 500),
+              rep(0.05, times = 500),
+              rep(0.1, times = 500)
+              )
+
+output_data <- as.data.frame(variance)
+
+
+
+tryCatch(
+for(i in seq_len(nrow(output_data))){
+  
+#generate data  
+data <- simulate_catch_data(R = 500,
+                            s0_av = 0.1,
+                            log10s0_sd = 0,
+                            g_av = 0.21,
+                            log10g_sd = 0.01,
+                            z_av = 0.21, 
+                            log10z_sd = output_data$variance[i],
+                            growth_in_weight = TRUE)
+
+data_binned <- create_size_data_bins(data = data,
+                                   bin_width_size = 0.05)
+
+
+size_data <- summarise_bin_counts(data_binned,
+                                  size_sampled,
+                                  0.05)
+
+data2 <- create_bins(data_binned,
+                     bin_width_age = 1,
+                     bin_width_size = 0.05)
+
+age_data <- sample_n(data2, size = nrow(data2)*0.3)
+
+ 
+data_for_stan_size_growth <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data),
+
+   
+    # data for length age estimates
+    N_growth = nrow(age_data),
+    age = age_data$age_bin,
+    size_ind = age_data$size_bin
+  )
+
+data_for_NASS <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data)
+  )
+
+
+# Now fit stan model
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3)
+
+#print(fit_size, probs=c(0.025, 0.5, 0.975))
+
+output_data$size_Z[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g[i] <- mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0[i] <- mean(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+
+# fit abund model
+
+fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
+
+
+#print(fit_abund, probs=c(0.025, 0.5, 0.975))
+
+output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+# fit Catch curve and nls
+nls_data <- list(age = age_data$age_bin,
+    size_ind = age_data$size_bin)
+
+
+start <- list(W0 = 0.01 , g = 0.5)  ### setting start parameters from above
+
+power <- size_ind ~ W0 * exp(age*g)  ### Growth equation
+
+
+fit <- nls(power, data = nls_data, start = start, control = list(maxiter = 1000), trace = TRUE) 
+
+
+#coef(fit)[1]
+#coef(fit)[2]
+
+modal_age <-  getmode(data2$age_bin)
+
+catch_dat <- data_binned %>% 
+  count(age_day = round(age, 0)) %>% 
+  subset(age_day >= modal_age)
+  
+
+catch2 <- lm(log(n) ~ age_day, data = catch_dat)
+#summary(catch2)
+
+output_data$LM_M[i] <- -as.numeric(coef(catch2)[2])
+output_data$LM_G[i] <- as.numeric(coef(fit)[2])
+output_data$LM_MG[i] <- output_data$LM_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+wlr <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "wlr")
+
+output_data$wlr_M[i] <- as.numeric(wlr$`results`[3])
+output_data$wlr_MG[i] <- output_data$wlr_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+crcb <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "crcb")
+
+output_data$crcb_M[i] <- as.numeric(crcb$`results`[3])
+output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
+
+}, error=function(e) e
+)
+
+output_data
+
+```
+
+Read output
+
+```{r}
+output_data <- readRDS("output/simulations_Z_variation2.rds")
+```
+
+Make long format data
+```{r}
+output_data2 <- output_data %>% 
+  subset(variance != 0.005)
+
+output_data2$abund_RP <- (output_data2$mean_b)-1
+
+data_plotting <- output_data2 %>% select(variance, size_RP, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% rename(z_var = variance)
+
+keycol <- "model"
+valuecol <- "estimate"
+gathercols <- c("size_RP", "abund_RP", "LM_MG", "wlr_MG", "crcb_MG")
+
+data_long <- gather_(data_plotting, keycol, valuecol, gathercols)
+
+data <- data_long %>% mutate(model = factor(model, levels=c("abund_RP", "size_RP", "LM_MG", "wlr_MG", "crcb_MG")))
+```
+
+summary table
+
+```{r}
+summary_table <- data %>% 
+  mutate(Mod_variance = paste(data$model,"_", data$z_var)) %>% 
+  group_by(Mod_variance) %>% 
+  mutate(log_est = log(estimate)) %>% 
+  summarise(Model = model,
+            Variance = z_var,
+            n = n(),
+         mean = mean(log_est),
+         sd = sd(log_est),
+         cv = sd(log_est)/mean(log_est),
+         rm2e = RMSE(log_est, 0),
+         unlogged_mean = mean(estimate)
+         ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  select(Model, Variance, n, mean, sd, cv, rm2e, unlogged_mean) %>% #, unlogged_mean
+  arrange(Variance) %>% 
+  arrange(Model)
+
+
+s <- summary_table %>% subset(Variance == 0.1)
+s
+
+
+Z_sum <- summary_table %>% 
+  group_by(Model)%>%
+  mutate(Mu = mean) %>% 
+  summarise(Model = Model,
+            mu = round(mean(Mu),3),
+            mu_min = round(min(Mu),3),
+            mu_max = round(max(Mu),3),
+            RM2E = round(mean(rm2e),3),
+            RM2E_min = round(min(rm2e),3),
+            RM2E_max = round(max(rm2e),3)
+            ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  select(Model, mu, mu_min, mu_max, RM2E, RM2E_min, RM2E_max) %>%
+  arrange(Model) 
+  
+Z_sum
+```
+
+mortality plot
+
+```{r}
+ggplot(data, aes(x = model, y = estimate, fill = model, group = model)) +
+  geom_violin(draw_quantiles = c(0.25, 0.5, 0.75), trim = FALSE) +
+  geom_hline(yintercept=1, color = "red", size=0.5, alpha = 0.5) +
+  theme_bw() +
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(plot.title = element_textbox(color = "black", hjust = 0.5, margin = margin(t = 3, b = 3), face = "italic")) +
+  scale_fill_manual(values =  pal_4) +
+  ylab(expression(bar(z)/bar(g))) +
+  facet_wrap(~z_var, nrow = 1, ncol = 7) + labs(title = "Zvar") + 
+  scale_y_log10(limits = c(0.3, 3),breaks = c(0.3, 1, 3))
+
+Z_plot <- ggplot(data, aes(x = model, y = estimate, fill = model, group = model)) +
+  geom_violin(draw_quantiles = c(0.25, 0.5, 0.75), trim = FALSE) +
+  geom_hline(yintercept=1, color = "red", size=0.5, alpha = 0.5) +
+  theme_bw() +
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none")+
+  theme(plot.title = element_textbox(color = "black", hjust = 0.5, margin = margin(t = 3, b = 3), face = "italic")) +
+  scale_fill_manual(values =  pal_4) +
+  ylab(expression(bar(z)/bar(g))) +
+  facet_wrap(~z_var, nrow = 1, ncol = 7) + labs(title = expression(sigma[z])) + 
+  scale_y_log10(limits = c(0.6, 1.6),breaks = c(0.6, 0.8, 1, 1.2,1.4,1.6))
+```
+
+
+## g sensitivity 
+
+```{r}
+variance <- c(rep(0, times = 500),
+              rep(0.005, times = 500),
+              rep(0.01, times = 500),
+              rep(0.02, times = 500),
+              rep(0.03, times = 500),
+              rep(0.05, times = 500),
+              rep(0.1, times = 500)
+              )
+
+output_data <- as.data.frame(variance)
+
+
+
+tryCatch(
+for(i in seq_len(nrow(output_data))){
+  
+#generate data  
+data <- simulate_catch_data(R = 500,
+                            s0_av = 0.1,
+                            log10s0_sd = 0,
+                            g_av = 0.21,
+                            log10g_sd = output_data$variance[i],
+                            z_av = 0.21, 
+                            log10z_sd = 0,
+                            growth_in_weight = TRUE)
+
+
+data <- data %>% 
+  subset(size_sampled != "Inf") %>% 
+  subset(size_sampled <= 50)
+  
+
+data_binned <- create_size_data_bins(data = data,
+                                   bin_width_size = 0.05)
+
+
+size_data <- summarise_bin_counts(data_binned,
+                                  size_sampled,
+                                  0.05)
+
+data2 <- create_bins(data_binned,
+                     bin_width_age = 1,
+                     bin_width_size = 0.05)
+
+age_data <- sample_n(data2, size = nrow(data2)*0.3)
+
+ 
+data_for_stan_size_growth <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data),
+
+   
+    # data for length age estimates
+    N_growth = nrow(age_data),
+    age = age_data$age_bin,
+    size_ind = age_data$size_bin
+  )
+
+data_for_NASS <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data)
+  )
+
+
+# Now fit stan model
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3)
+
+
+output_data$size_Z[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g[i] <- mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0[i] <- mean(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+
+# fit abund model
+
+fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
+
+output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+# fit Catch curve and nls
+nls_data <- list(age = age_data$age_bin,
+    size_ind = age_data$size_bin)
+
+
+start <- list(W0 = 0.01 , g = 0.5)  ### setting start parameters from above
+
+power <- size_ind ~ W0 * exp(age*g)  ### Growth equation
+
+
+fit <- nls(power, data = nls_data, start = start, control = list(maxiter = 1000), trace = TRUE) 
+
+
+modal_age <-  getmode(data2$age_bin)
+
+catch_dat <- data_binned %>% 
+  count(age_day = round(age, 0)) %>% 
+  subset(age_day >= modal_age)
+  
+
+catch2 <- lm(log(n) ~ age_day, data = catch_dat)
+
+output_data$LM_M[i] <- -as.numeric(coef(catch2)[2])
+output_data$LM_G[i] <- as.numeric(coef(fit)[2])
+output_data$LM_MG[i] <- output_data$LM_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+wlr <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "wlr")
+
+output_data$wlr_M[i] <- as.numeric(wlr$`results`[3])
+output_data$wlr_MG[i] <- output_data$wlr_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+crcb <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "crcb")
+
+output_data$crcb_M[i] <- as.numeric(crcb$`results`[3])
+output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
+
+
+}, error=function(e) e
+)
+
+output_data
+```
+
+### Read output
+
+```{r}
+output_data <- readRDS("output/simulations_g_variation2.rds")
+```
+
+Make long format data
+```{r}
+output_data2 <- output_data %>% 
+  subset(variance != 0.005)
+
+output_data2$abund_RP <- (output_data2$mean_b)-1
+
+data_plotting <- output_data2 %>% select(variance, size_RP, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% rename(g_var = variance)
+
+keycol <- "model"
+valuecol <- "estimate"
+gathercols <- c("size_RP", "abund_RP", "LM_MG", "wlr_MG", "crcb_MG")
+
+data_long <- gather_(data_plotting, keycol, valuecol, gathercols)
+
+data <- data_long %>% mutate(model = factor(model, levels=c("abund_RP","size_RP", "LM_MG", "wlr_MG", "crcb_MG")))
+```
+
+Summary table
+
+```{r}
+summary_table <- data %>% 
+  mutate(Mod_variance = paste(data$model,"_", data$g_var)) %>% 
+  group_by(Mod_variance) %>% 
+  mutate(log_est = log(estimate)) %>% 
+  summarise(Model = model,
+            Variance = g_var,
+            n = n(),
+         mean = mean(log_est),
+         sd = sd(log_est),
+         cv = sd(log_est)/mean(log_est),
+         rm2e = RMSE(log_est, 0),
+         unlogged_mean = mean(estimate)
+         ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  select(Model, Variance, n, mean, sd, cv, rm2e, unlogged_mean) %>% #, unlogged_mean
+  arrange(Variance) %>% 
+  arrange(Model)
+
+summary_table
+
+
+#s <- summary_table %>% subset(Model == "abund_RP" | Model == "size_RP")
+s <- summary_table %>% subset(Model == "LM_MG" | Model == "wlr_MG" | Model == "crcb_MG")
+
+range(s$mean)
+range(s$sd)
+
+
+
+G_sum <- summary_table %>% 
+  group_by(Model)%>%
+  mutate(Mu = mean) %>% 
+  summarise(Model = Model,
+            mu = round(mean(Mu),3),
+            mu_min = round(min(Mu),3),
+            mu_max = round(max(Mu),3),
+            RM2E = round(mean(rm2e),3),
+            RM2E_min = round(min(rm2e),3),
+            RM2E_max = round(max(rm2e),3)
+            ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  select(Model, mu, mu_min, mu_max, RM2E, RM2E_min, RM2E_max) %>%
+  arrange(Model) 
+  
+G_sum
+```
+
+Growth plot
+```{r}
+g_plot <- ggplot(data, aes(x = model, y = estimate, fill = model, group = model)) +
+  geom_violin(draw_quantiles = c(0.25, 0.5, 0.75), trim = FALSE) +
+  geom_hline(yintercept=1, color = "red", size=0.5, alpha = 0.5) +
+  theme_bw() +
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "bottom")+
+  theme(plot.title = element_textbox(color = "black", hjust = 0.5, margin = margin(t = 3, b = 3), face = "italic")) +
+  scale_fill_manual(values =  pal_4) +
+  ylab(expression(bar(z)/bar(g))) +
+  facet_wrap(~g_var, nrow = 1, ncol = 7) + labs(title = expression(sigma[g])) + 
+  scale_y_log10(limits = c(0.4, 1.6),breaks = c(0.4,0.6, 0.8, 1, 1.2,1.4,1.6))
+
+g_plot
+```
+
+
+## Fig.4: Plot Sensitivity
+
+```{r}
+Fig_4 <- R_plot / Z_plot / g_plot
+
+Fig_4
+```
+
+# Section 4: measurment error
+This code produces the analysis of measurement error and Fig 5.
+
+Aging error
+
+```{r}
+
+## test
+#variance <- c(0,0,1,1,2,2)
+variance <- c(rep(0, times = 500),
+              rep(0.01, times = 500),
+              rep(0.02, times = 500),
+              rep(0.1, times = 500),
+              rep(1, times = 500),
+              rep(2, times = 500)
+              )
+
+output_data <- as.data.frame(variance)
+
+
+tryCatch(
+for(i in seq_len(nrow(output_data))){
+  
+#generate data  
+data <- simulate_catch_data(R = 500,
+                            s0_av = 0.1,
+                            log10s0_sd = 0,
+                            g_av = 0.21,
+                            log10g_sd = 0,
+                            z_av = 0.21, 
+                            log10z_sd = 0,
+                            growth_in_weight = TRUE)
+
+
+data <- data %>% 
+  subset(size_sampled != "Inf") %>% 
+  subset(size_sampled <= 50)
+
+data_binned <- create_size_data_bins(data = data,
+                                   bin_width_size = 0.05)
+
+
+size_data <- summarise_bin_counts(data_binned,
+                                  size_sampled,
+                                  0.05)
+
+data2 <- create_bins(data_binned,
+                     bin_width_age = 1,
+                     bin_width_size = 0.05)
+
+age_data <- sample_n(data2, size = nrow(data2)*0.3)
+
+
+age_var = output_data$variance[i]
+  
+age_data <- age_data %>%
+    mutate(age_bin = round(rnorm(length(age_bin), mean = age_bin, sd = age_var))) %>% 
+  subset(age_bin >= 0)
+
+ 
+data_for_stan_size_growth <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data),
+
+   
+    # data for length age estimates
+    N_growth = nrow(age_data),
+    age = age_data$age_bin,
+    size_ind = age_data$size_bin
+  )
+
+data_for_NASS <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data)
+  )
+
+
+# Now fit stan model
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3)
+
+output_data$size_Z[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g[i] <- mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0[i] <- mean(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+
+# fit abund model
+
+fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
+
+
+output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+# fit Catch curve and nls
+nls_data <- list(age = age_data$age_bin,
+    size_ind = age_data$size_bin)
+
+
+start <- list(W0 = 0.01 , g = 0.5)  ### setting start parameters from above
+
+power <- size_ind ~ W0 * exp(age*g)  ### Growth equation
+
+
+#nls
+fit <- tryCatch({nls(power, data = nls_data, start = start, control = list(maxiter = 1000, minFactor = 0), trace = TRUE)
+    }, error=function(e){
+      x = c(0,1,2,3)
+      y = c(-1,0,1,2)
+      lm(y~x)
+    }) # create coeff(fit)[1] == -1 when error
+
+
+data_binned <- data_binned %>% 
+  mutate(age = round(rnorm(length(age), mean = age, sd = age_var))) %>% 
+  subset(age >= 0)
+
+modal_age <-  getmode(data_binned$age)
+
+catch_dat <- data_binned %>% 
+  count(age_day = round(age, 0)) %>% 
+  subset(age_day >= modal_age)
+
+
+catch2 <- lm(log(n) ~ age_day, data = catch_dat)
+
+
+output_data$LM_M[i] <- -as.numeric(coef(catch2)[2])
+output_data$LM_G[i] <- as.numeric(coef(fit)[2])
+output_data$LM_MG[i] <- output_data$LM_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+wlr <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "wlr")
+
+output_data$wlr_M[i] <- as.numeric(wlr$`results`[3])
+output_data$wlr_MG[i] <- output_data$wlr_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+crcb <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "crcb")
+
+output_data$crcb_M[i] <- as.numeric(crcb$`results`[3])
+output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
+
+### dealing wqith error in nls
+
+if (coef(fit)[1] == -1) {
+output_data$LM_M[i] <- -as.numeric(coef(catch2)[2])
+output_data$LM_G[i] <- NA
+output_data$LM_MG[i] <- NA
+
+#fit weighted catch curve
+wlr <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "wlr")
+
+output_data$wlr_M[i] <- as.numeric(wlr$`results`[3])
+output_data$wlr_MG[i] <- NA
+
+#fit weighted catch curve
+crcb <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "crcb")
+
+output_data$crcb_M[i] <- as.numeric(crcb$`results`[3])
+output_data$crcb_MG[i] <- NA
+}
+
+}, error=function(e) e
+)
+
+output_data
+```
+
+
+Make long format data
+
+```{r}
+output_data <- readRDS("output/simulations_Age_variation2.rds")
+
+
+output_data2 <- output_data
+
+output_data2$abund_RP <- (output_data2$mean_b)-1
+
+data_plotting <- output_data2 %>% select(variance, size_RP, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% rename(age_var = variance)
+
+keycol <- "model"
+valuecol <- "estimate"
+gathercols <-  c("size_RP", "abund_RP", "LM_MG", "wlr_MG", "crcb_MG")
+
+data_long <- gather_(data_plotting, keycol, valuecol, gathercols)
+
+data <- data_long %>% mutate(model = factor(model, levels=c("abund_RP","size_RP",  "LM_MG", "wlr_MG", "crcb_MG")))
+
+
+#Plot
+age_var_plot <- ggplot(data, aes(x = model, y = estimate, fill = model, group = model)) +
+  geom_violin(draw_quantiles = c(0.25, 0.5, 0.75), trim = FALSE) +
+  geom_hline(yintercept=1, color = "red", size=0.5, alpha = 0.5) +
+  theme_bw() +
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none")+
+  theme(plot.title = element_textbox(color = "black", hjust = 0.5, margin = margin(t = 3, b = 3), face = "italic")) +
+  scale_fill_manual(values =  pal_4) +
+  ylab(expression(bar(z)/bar(g))) +
+  facet_wrap(~age_var, nrow = 1, ncol = 7) + labs(title = expression(epsilon[age])) +
+  scale_y_log10(limits = c(0.6, 1.6), breaks = c(0.6, 0.8, 1,1.2,1.4, 1.6))
+
+age_var_plot
+```
+
+Summary tables
+
+```{r}
+summary_table <- data %>% 
+  mutate(Mod_variance = paste(data$model,"_", data$age_var)) %>% 
+  group_by(Mod_variance) %>% 
+  mutate(log_est = log(estimate)) %>% 
+  summarise(Model = model,
+            Variance = age_var,
+            n = n(),
+         mean = mean(log_est),
+         sd = sd(log_est),
+         cv = sd(log_est)/mean(log_est),
+         rm2e = RMSE(log_est, 0),
+         unlogged_mean = mean(estimate)
+         ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  select(Model, Variance, n, mean, sd, cv, rm2e, unlogged_mean) %>% #, unlogged_mean
+  arrange(Variance) %>% 
+  arrange(Model)
+
+summary_table
+
+
+s1 <- summary_table %>% subset(Model == "abund_RP")
+
+range(round(s1$mean,3))
+range(round(s1$sd,3))
+
+s2 <- summary_table %>% subset(Model == "size_RP")
+
+range(round(s2$mean,3))
+range(round(s2$sd,3))
+
+s3 <- summary_table %>% subset(Model == "LM_MG") %>%  mutate(mean = round(mean,3)) %>%  mutate(sd = round(sd,3))
+
+range(round(s3$mean,3))
+range(round(s3$sd,3))
+
+
+s4 <- summary_table %>% subset(Model == "wlr_MG") %>%  mutate(mean = round(mean,3)) %>%  mutate(sd = round(sd,3))
+
+s4
+
+s5 <- summary_table %>% subset(Model == "crcb_MG") %>%  mutate(mean = round(mean,3)) %>%  mutate(sd = round(sd,3))
+
+s5
+
+
+
+s6 <- summary_table %>% subset(Model == "LM_MG" | Model == "wlr_MG" | Model == "crcb_MG")
+
+
+
+
+
+age_sum <- summary_table %>% 
+  group_by(Model)%>%
+  mutate(Mu = mean) %>% 
+  summarise(Model = Model,
+            mu = round(mean(Mu),3),
+            mu_min = round(min(Mu),3),
+            mu_max = round(max(Mu),3),
+            RM2E = round(mean(rm2e),3),
+            RM2E_min = round(min(rm2e),3),
+            RM2E_max = round(max(rm2e),3)
+            ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  select(Model, mu, mu_min, mu_max, RM2E, RM2E_min, RM2E_max) %>%
+  arrange(Model) 
+  
+age_sum %>%
+  arrange(Model) 
+  
+```
+
+Size error
+              
+```{r}
+variance <- c(rep(0, times = 500),
+              rep(0.001, times = 500),
+              rep(0.005, times = 500),
+              rep(0.01, times = 500),
+              rep(0.05, times = 500),
+              rep(0.1, times = 500)
+              )
+
+output_data <- as.data.frame(variance)
+
+
+tryCatch(
+for(i in seq_len(nrow(output_data))){
+  
+#generate data  
+data <- simulate_catch_data(R = 500,
+                            s0_av = 0.1,
+                            log10s0_sd = 0,
+                            g_av = 0.21,
+                            log10g_sd = 0,
+                            z_av = 0.21, 
+                            log10z_sd = 0,
+                            growth_in_weight = TRUE)
+
+data <- data %>% 
+  subset(size_sampled != "Inf") %>% 
+  subset(size_sampled <= 50)
+
+
+size_var = output_data$variance[i]
+
+data <- data %>% 
+  mutate(size_sampled = rnorm(length(size_sampled), mean = size_sampled, sd = size_var)) %>% 
+  subset(size_sampled >= 0)
+
+data_binned <- create_size_data_bins(data = data,
+                                   bin_width_size = 0.05)
+
+
+size_data <- summarise_bin_counts(data_binned,
+                                  size_sampled,
+                                  0.05)
+
+#cut at the top of the descending limb
+modal_size <- size_data$binned_var[which.max(size_data$counts)]
+
+size_data <- size_data %>% 
+  subset(binned_var >= modal_size)
+
+# select fish for aging
+
+data2 <- create_bins(data_binned,
+                     bin_width_age = 1,
+                     bin_width_size = 0.05)
+
+age_data <- sample_n(data2, size = nrow(data2)*0.3)
+ 
+#format for stan models
+
+data_for_stan_size_growth <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data),
+
+   
+    # data for length age estimates
+    N_growth = nrow(age_data),
+    age = age_data$age_bin,
+    size_ind = age_data$size_bin
+  )
+
+data_for_NASS <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data)
+  )
+
+
+# Now fit stan model
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3)
+
+output_data$size_Z[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g[i] <- mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0[i] <- mean(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+
+# fit abund model
+
+fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
+
+
+output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+# fit Catch curve and nls
+nls_data <- list(age = age_data$age_bin,
+    size_ind = age_data$size_bin)
+
+
+start <- list(W0 = 0.01 , g = 0.5)  ### setting start parameters from above
+
+power <- size_ind ~ W0 * exp(age*g)  ### Growth equation
+
+
+#nls
+fit <- tryCatch({nls(power, data = nls_data, start = start, control = list(maxiter = 1000, minFactor = 0), trace = TRUE)
+    }, error=function(e){
+      x = c(0,1,2,3)
+      y = c(-1,0,1,2)
+      lm(y~x)
+    }) # create coeff(fit)[1] == -1 when error
+
+
+
+
+modal_age <-  getmode(round(data_binned$age,0))
+
+catch_dat <- data_binned %>% 
+  count(age_day = round(age, 0)) %>% 
+  subset(age_day >= modal_age)
+
+
+catch2 <- lm(log(n) ~ age_day, data = catch_dat)
+
+
+output_data$LM_M[i] <- -as.numeric(coef(catch2)[2])
+output_data$LM_G[i] <- as.numeric(coef(fit)[2])
+output_data$LM_MG[i] <- output_data$LM_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+wlr <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "wlr")
+
+output_data$wlr_M[i] <- as.numeric(wlr$`results`[3])
+output_data$wlr_MG[i] <- output_data$wlr_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+crcb <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "crcb")
+
+output_data$crcb_M[i] <- as.numeric(crcb$`results`[3])
+output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
+
+### dealing with error in nls
+
+if (coef(fit)[1] == -1) {
+output_data$LM_M[i] <- -as.numeric(coef(catch2)[2])
+output_data$LM_G[i] <- NA
+output_data$LM_MG[i] <- NA
+
+#fit weighted catch curve
+wlr <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "wlr")
+
+output_data$wlr_M[i] <- as.numeric(wlr$`results`[3])
+output_data$wlr_MG[i] <- NA
+
+#fit weighted catch curve
+crcb <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "crcb")
+
+output_data$crcb_M[i] <- as.numeric(crcb$`results`[3])
+output_data$crcb_MG[i] <- NA
+}
+
+}, error=function(e) e
+)
+
+output_data
+```
+
+Make long format data
+```{r}
+output_data <- readRDS("output/simulations_size_measurement_error2.rds")
+
+
+output_data2 <- output_data
+
+output_data2$abund_RP <- (output_data2$mean_b)-1
+
+data_plotting <- output_data2 %>% select(variance, size_RP, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% rename(size_var = variance)
+
+keycol <- "model"
+valuecol <- "estimate"
+gathercols <-  c("size_RP", "abund_RP", "LM_MG", "wlr_MG", "crcb_MG")
+
+data_long <- gather_(data_plotting, keycol, valuecol, gathercols)
+
+data <- data_long %>% mutate(model = factor(model, levels=c("abund_RP", "size_RP",  "LM_MG", "wlr_MG", "crcb_MG")))
+
+
+#Plot
+size_var_plot <- ggplot(data, aes(x = model, y = estimate, fill = model, group = model)) +
+  geom_violin(draw_quantiles = c(0.25, 0.5, 0.75), trim = FALSE) +
+  geom_hline(yintercept=1, color = "red", size=0.5, alpha = 0.5) +
+  theme_bw() +
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "bottom")+
+  theme(plot.title = element_textbox(color = "black", hjust = 0.5, margin = margin(t = 3, b = 3), face = "italic")) +
+  scale_fill_manual(values =  pal_4) +
+  ylab(expression(bar(z)/bar(g))) +
+  facet_wrap(~size_var, nrow = 1, ncol = 7) + labs(title = expression(epsilon[size])) +
+  scale_y_log10(limits = c(0.6, 1.6), breaks = c(0.6, 0.8, 1,1.2,1.4, 1.6))
+
+size_var_plot
+```
+
+
+Summary tables
+```{r}
+summary_table <- data %>% 
+  mutate(Mod_variance = paste(data$model,"_", data$size_var)) %>% 
+  group_by(Mod_variance) %>% 
+  mutate(log_est = log(estimate)) %>% 
+  summarise(Model = model,
+            Variance = size_var,
+            n = n(),
+         mean = mean(na.omit(log_est)),
+         sd = sd(na.omit(log_est)),
+         cv = sd(na.omit(log_est))/mean(na.omit(log_est)),
+         rm2e = RMSE(na.omit(log_est), 0),
+         unlogged_mean = mean(na.omit(estimate))
+         ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  select(Model, Variance, n, mean, sd, cv, rm2e, unlogged_mean) %>% #, unlogged_mean
+  arrange(Variance) %>% 
+  arrange(Model)
+
+summary_table
+
+
+s1 <- summary_table %>% subset(Model == "abund_RP") %>%  mutate(mean = round(mean,3)) %>%  mutate(sd = round(sd,3))
+
+s1
+
+range(round(s1$mean,3))
+range(round(s1$sd,3))
+
+s2 <- summary_table %>% subset(Model == "size_RP") %>%  mutate(mean = round(mean,3)) %>%  mutate(sd = round(sd,3))
+
+s2
+
+range(round(s2$mean,3))
+range(round(s2$sd,3))
+
+s3 <- summary_table %>% subset(Model == "LM_MG") %>%  mutate(mean = round(mean,3)) %>%  mutate(sd = round(sd,3))
+
+range(round(s3$mean,3))
+range(round(s3$sd,3))
+
+
+s4 <- summary_table %>% subset(Model == "wlr_MG") %>%  mutate(mean = round(mean,3)) %>%  mutate(sd = round(sd,3))
+
+s4
+range(round(s4$mean,3))
+range(round(s4$sd,3))
+
+s5 <- summary_table %>% subset(Model == "crcb_MG") %>%  mutate(mean = round(mean,3)) %>%  mutate(sd = round(sd,3))
+
+s5
+
+range(round(s5$mean,3))
+range(round(s5$sd,3))
+
+
+s6 <- summary_table %>% subset(Model == "LM_MG" | Model == "wlr_MG" | Model == "crcb_MG")  %>%  mutate(mean = round(mean,3)) %>%  mutate(sd = round(sd,3))
+
+s6
+
+
+size_sum <- summary_table %>% 
+  group_by(Model)%>%
+  mutate(Mu = mean) %>% 
+  summarise(Model = Model,
+            mu = round(mean(Mu),3),
+            mu_min = round(min(Mu),3),
+            mu_max = round(max(Mu),3),
+            RM2E = round(mean(rm2e),3),
+            RM2E_min = round(min(rm2e),3),
+            RM2E_max = round(max(rm2e),3)
+            ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  select(Model, mu, mu_min, mu_max, RM2E, RM2E_min, RM2E_max) %>%
+  arrange(Model) 
+  
+size_sum %>%
+  arrange(Model) 
+```
+
+### Fig. 5: measurement error
+
+```{r}
+Fig_5 <- age_var_plot / size_var_plot
+Fig_5
+```
+
