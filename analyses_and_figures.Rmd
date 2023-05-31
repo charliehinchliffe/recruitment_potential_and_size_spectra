@@ -56,6 +56,11 @@ pal_1 <- c("#001eff",
 pal_1_1 <- c("#150549",
            "#f000ff")
 
+pal_2 <- c("#001eff",
+           "#f000ff",
+           "#ffe700",
+           "#ff4d00",
+           "#00ecff")
 
 pal_2_1 <- c("#f000ff",
            "#ffe700",
@@ -95,13 +100,14 @@ ret_abund <- stan_model(file="stan/abundance_slope.stan")
 # Section 1: Biomas trajectory - Fig 1.
 
 This code reproduced data and plots Fig. 1.
-```{r, eval = FALSE}
+```{r, eval = TRUE}
 # Make data frame with initial values
-t <- seq(0,15,0.01)
-z <- 0.15*sin(t) + 0.25
-g <- 0.15*sin(t+2.5) + 0.25
+N_iter = 1000
+
+z <- runif(N_iter, min = 0.05, max = 0.5) 
+g <- runif(N_iter, min = 0.05, max = 0.5) 
   
-output_data <- cbind(t,z,g) %>%  as.data.frame()
+output_data <- cbind(z,g) %>%  as.data.frame()
 
 output_data$RP <- output_data$z/output_data$g
 
@@ -144,11 +150,12 @@ output_data$ratio[i] <- as.numeric(bio_data[1,2]/bio_data[2,2])
 
 output_data
 
+saveRDS(output_data, "outputs/simulations_biomass_ratio_age15toage5.rds")
 ```
 
 Plot
 ```{r}
-output_data <- readRDS("output/simulations_biomass_ratio_age15toage5.rds")
+output_data <- readRDS("outputs/simulations_biomass_ratio_age15toage5.rds")
 
 Fig_1 <- ggplot(output_data, aes(RP, ratio)) +
   geom_point2(size = 2) +
@@ -156,8 +163,8 @@ Fig_1 <- ggplot(output_data, aes(RP, ratio)) +
   scale_y_log10() +
   ylab('Age15:Age5 Biomass Ratio') +
   xlab(expression(bar(z)/bar(g))) + 
-  geom_hline(yintercept = 1, color = "red", size=0.5, alpha = 0.5) +
-  geom_vline(xintercept = 1, color = "red", size=0.5, alpha = 0.5) +
+  geom_hline(yintercept = 1, color = "red", linewidth=0.5, alpha = 0.5) +
+  geom_vline(xintercept = 1, color = "red", linewidth=0.5, alpha = 0.5) +
   theme_bw()+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none")
   
@@ -165,41 +172,23 @@ Fig_1
 ```
 
 # Section 2: Varying growth and mortality
+
 This code reproduces varying growth and mortality analyses and plots Fig 2.
 
-```{r}
-t <- seq(0,15,0.25)
-
-v <- 0.15*sin(t) + 0.25
-offv <- 0.15*sin(t+2.5) + 0.25
-
-y <- (v)#M
-y2 <- (offv) #G
-y3 <- log(y/y2) #M/G
-
-plot(y~t, ylim=c(-1.5, 1.5))
-lines(y~t, col = "green")
-lines(y2~t, col = "red")
-lines(y3~t, col = "blue")
-```
-
 Run models
-```{r, eval = FALSE}
-
+```{r, eval = TRUE}
 #Make data frame with initial values
-t <- seq(0,15,0.25)
-z <- 0.15*sin(t) + 0.25
-g <- 0.15*sin(t+2.5) + 0.25
+N_iter = 500
+
+z <- runif(N_iter, min = 0.05, max = 0.5) #1000
+g <- runif(N_iter, min = 0.05, max = 0.5) #1000
+t <- seq(1, N_iter, by = 1)
+
+plot(z~g, ylim=c(0, 0.55))
+plot(g~t, ylim=c(0, 0.55))
+plot(z~t, ylim=c(0, 0.55))
 
 output_data <- cbind(t,z,g) %>%  as.data.frame()
-
-output_data2 <- cbind(t,z,g) %>%  as.data.frame()
-
-output_data3 <- cbind(t,z,g) %>%  as.data.frame()
-
-
-output_data <- rbind.data.frame(output_data, output_data2, output_data3)
-
 
 tryCatch(
 for(i in seq_len(nrow(output_data))){
@@ -253,7 +242,7 @@ data_for_NASS <-
 
 
 # Now fit stan model
-fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3)
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3) #chains = 3
 
 print(fit_size, probs=c(0.025, 0.5, 0.975))
 
@@ -267,9 +256,18 @@ output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
 
 output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
 
+  #medians
+output_data$size_Z_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g_median[i] <- median(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0_median[i] <- median(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R_median[i] <- median(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])/median(rstan::extract(fit_size, pars="g")[["g"]])
 
 # fit abund model
-
 fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
 
 
@@ -277,6 +275,10 @@ print(fit_abund, probs=c(0.025, 0.5, 0.975))
 
 output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
 output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+  #medians
+output_data$median_a[i] <- median(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$median_b[i] <- median(rstan::extract(fit_abund, pars="b")[["b"]])
 
 # fit Catch curve and nls
 nls_data <- list(age = age_data$age_bin,
@@ -324,12 +326,14 @@ output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
 )
 
 output_data
+
+saveRDS(output_data, "outputs/simulations_runif_z_g.rds")
 ```
 
 Plot output
 
 ```{r}
-output_data <- readRDS("output/simulations_sine_function.rds")
+output_data <- readRDS("outputs/simulations_runif_z_g.rds")
 
 output_data2 <- output_data
 
@@ -560,13 +564,14 @@ This section reproduces sensitivity analysis, and plot Fig 4.
 ## R sensitivity
 
 ```{r}
+N_iter = 500
 
-hatches_per_day <- c(rep(10, times = 500),
-                     rep(20, times = 500),
-                     rep(50, times = 500),
-                     rep(100, times = 500),
-                     rep(200, times = 500),
-                     rep(500, times = 500)
+hatches_per_day <- c(rep(10, times = N_iter), 
+                     rep(20, times = N_iter),
+                     rep(50, times = N_iter),
+                     rep(100, times = N_iter),
+                     rep(200, times = N_iter),
+                     rep(500, times = N_iter)
                      )
 
 output_data <- as.data.frame(hatches_per_day)
@@ -640,6 +645,17 @@ output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
 
 output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
 
+#medians
+
+output_data$size_Z_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g_median[i] <- median(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0_median[i] <- median(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R_median[i] <- median(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])/median(rstan::extract(fit_size, pars="g")[["g"]])
 
 # fit abund model
 
@@ -650,6 +666,10 @@ print(fit_abund, probs=c(0.025, 0.5, 0.975))
 
 output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
 output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+#medians
+output_data$median_a[i] <- median(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$median_b[i] <- median(rstan::extract(fit_abund, pars="b")[["b"]])
 
 # fit Catch curve and nls
 nls_data <- list(age = age_data$age_bin,
@@ -698,11 +718,12 @@ output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
 
 output_data
 
+saveRDS(output_data, "outputs/simulations_R_variation.rds")
 ```
 
 Read output 
 ```{r}
-output_data <- readRDS("output/simulations_R_variation2.rds")
+output_data <- readRDS("outputs/simulations_R_variation.rds")
 ```
 
 Make long format data
@@ -789,14 +810,15 @@ R_plot
 ## Z sensitivity 
 
 ```{r}
+N_iter = 500
 
-variance <- c(rep(0, times = 500),
-              rep(0.005, times = 500),
-              rep(0.01, times = 500),
-              rep(0.02, times = 500),
-              rep(0.03, times = 500),
-              rep(0.05, times = 500),
-              rep(0.1, times = 500)
+variance <- c(rep(0, times = N_iter), 
+              rep(0.005, times = N_iter),
+              rep(0.01, times = N_iter),
+              rep(0.02, times = N_iter),
+              rep(0.03, times = N_iter),
+              rep(0.05, times = N_iter),
+              rep(0.1, times = N_iter)
               )
 
 output_data <- as.data.frame(variance)
@@ -869,16 +891,32 @@ output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
 
 output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
 
+#medians
+
+output_data$size_Z_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g_median[i] <- median(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0_median[i] <- median(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R_median[i] <- median(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])/median(rstan::extract(fit_size, pars="g")[["g"]])
 
 # fit abund model
 
 fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
 
 
-#print(fit_abund, probs=c(0.025, 0.5, 0.975))
+print(fit_abund, probs=c(0.025, 0.5, 0.975))
 
 output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
 output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+#medians
+output_data$median_a[i] <- median(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$median_b[i] <- median(rstan::extract(fit_abund, pars="b")[["b"]])
+
 
 # fit Catch curve and nls
 nls_data <- list(age = age_data$age_bin,
@@ -927,12 +965,13 @@ output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
 
 output_data
 
+saveRDS(output_data, "outputs/simulations_Z_variation.rds")
 ```
 
 Read output
 
 ```{r}
-output_data <- readRDS("output/simulations_Z_variation2.rds")
+output_data <- readRDS("outputs/simulations_Z_variation.rds")
 ```
 
 Make long format data
@@ -1029,13 +1068,15 @@ Z_plot <- ggplot(data, aes(x = model, y = estimate, fill = model, group = model)
 ## g sensitivity 
 
 ```{r}
-variance <- c(rep(0, times = 500),
-              rep(0.005, times = 500),
-              rep(0.01, times = 500),
-              rep(0.02, times = 500),
-              rep(0.03, times = 500),
-              rep(0.05, times = 500),
-              rep(0.1, times = 500)
+N_iter = 500
+
+variance <- c(rep(0, times = N_iter),
+              rep(0.005, times = N_iter),
+              rep(0.01, times = N_iter),
+              rep(0.02, times = N_iter),
+              rep(0.03, times = N_iter),
+              rep(0.05, times = N_iter),
+              rep(0.1, times = N_iter)
               )
 
 output_data <- as.data.frame(variance)
@@ -1113,13 +1154,32 @@ output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
 
 output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
 
+    #medians
+
+output_data$size_Z_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g_median[i] <- median(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0_median[i] <- median(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R_median[i] <- median(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])/median(rstan::extract(fit_size, pars="g")[["g"]])
 
 # fit abund model
 
 fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
 
+
+print(fit_abund, probs=c(0.025, 0.5, 0.975))
+
 output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
 output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+    #medians
+output_data$median_a[i] <- median(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$median_b[i] <- median(rstan::extract(fit_abund, pars="b")[["b"]])
+
 
 # fit Catch curve and nls
 nls_data <- list(age = age_data$age_bin,
@@ -1164,12 +1224,14 @@ output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
 )
 
 output_data
+
+saveRDS(output_data, "outputs/simulations_g_variation.rds")
 ```
 
 ### Read output
 
 ```{r}
-output_data <- readRDS("output/simulations_g_variation2.rds")
+output_data <- readRDS("outputs/simulations_g_variation.rds")
 ```
 
 Make long format data
@@ -1274,14 +1336,14 @@ Aging error
 
 ```{r}
 
-## test
-#variance <- c(0,0,1,1,2,2)
-variance <- c(rep(0, times = 500),
-              rep(0.01, times = 500),
-              rep(0.02, times = 500),
-              rep(0.1, times = 500),
-              rep(1, times = 500),
-              rep(2, times = 500)
+N_iter = 500
+
+variance <- c(rep(0, times = N_iter),
+              rep(0.01, times = N_iter),
+              rep(0.02, times = N_iter),
+              rep(0.1, times = N_iter),
+              rep(1, times = N_iter),
+              rep(2, times = N_iter)
               )
 
 output_data <- as.data.frame(variance)
@@ -1364,13 +1426,32 @@ output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
 output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
 
 
+#medians
+
+output_data$size_Z_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g_median[i] <- median(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0_median[i] <- median(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R_median[i] <- median(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])/median(rstan::extract(fit_size, pars="g")[["g"]])
+
 # fit abund model
 
 fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
 
 
+print(fit_abund, probs=c(0.025, 0.5, 0.975))
+
 output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
 output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+    #medians
+output_data$median_a[i] <- median(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$median_b[i] <- median(rstan::extract(fit_abund, pars="b")[["b"]])
+
 
 # fit Catch curve and nls
 nls_data <- list(age = age_data$age_bin,
@@ -1445,13 +1526,15 @@ output_data$crcb_MG[i] <- NA
 )
 
 output_data
+
+saveRDS(output_data, "outputs/simulations_Age_variation.rds")
 ```
 
 
 Make long format data
 
 ```{r}
-output_data <- readRDS("output/simulations_Age_variation2.rds")
+output_data <- readRDS("outputs/simulations_Age_variation.rds")
 
 
 output_data2 <- output_data
@@ -1565,12 +1648,14 @@ age_sum %>%
 Size error
               
 ```{r}
-variance <- c(rep(0, times = 500),
-              rep(0.001, times = 500),
-              rep(0.005, times = 500),
-              rep(0.01, times = 500),
-              rep(0.05, times = 500),
-              rep(0.1, times = 500)
+N_iter = 500
+
+variance <- c(rep(0, times = N_iter),
+              rep(0.001, times = N_iter),
+              rep(0.005, times = N_iter),
+              rep(0.01, times = N_iter),
+              rep(0.05, times = N_iter),
+              rep(0.1, times = N_iter)
               )
 
 output_data <- as.data.frame(variance)
@@ -1661,13 +1746,31 @@ output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
 output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
 
 
+#medians
+
+output_data$size_Z_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g_median[i] <- median(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0_median[i] <- median(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R_median[i] <- median(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])/median(rstan::extract(fit_size, pars="g")[["g"]])
+
 # fit abund model
 
 fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
 
 
+print(fit_abund, probs=c(0.025, 0.5, 0.975))
+
 output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
 output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+    #medians
+output_data$median_a[i] <- median(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$median_b[i] <- median(rstan::extract(fit_abund, pars="b")[["b"]])
 
 # fit Catch curve and nls
 nls_data <- list(age = age_data$age_bin,
@@ -1740,11 +1843,13 @@ output_data$crcb_MG[i] <- NA
 )
 
 output_data
+
+saveRDS(output_data, "outputs/simulations_size_measurement_error.rds")
 ```
 
 Make long format data
 ```{r}
-output_data <- readRDS("output/simulations_size_measurement_error2.rds")
+output_data <- readRDS("outputs/simulations_size_measurement_error.rds")
 
 
 output_data2 <- output_data
