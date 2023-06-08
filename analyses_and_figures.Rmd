@@ -20,6 +20,8 @@ library(nlstools)
 library(FSA)
 source("R/agesurv_no_rounding.R")
 
+#library(progress)
+
 ```
 
 # Functions
@@ -190,9 +192,17 @@ plot(z~t, ylim=c(0, 0.55))
 
 output_data <- cbind(t,z,g) %>%  as.data.frame()
 
+# #intialise progress bar
+# pb <- progress_bar$new(
+#   format = " iteration [:bar] : percent in :elapsed",
+#   total = nrow(output_data), clear=FALSE, width=60
+# )
+
 tryCatch(
 for(i in seq_len(nrow(output_data))){
 
+ # pb$tick() # progress bar
+  
 #generate data  
 data <- simulate_catch_data(R = 500,
                             s0_av = 0.1,
@@ -242,7 +252,7 @@ data_for_NASS <-
 
 
 # Now fit stan model
-fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3) #chains = 3
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3, cores=3) #chains = 3
 
 print(fit_size, probs=c(0.025, 0.5, 0.975))
 
@@ -1141,7 +1151,7 @@ data_for_NASS <-
 
 
 # Now fit stan model
-fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3)
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3, cores=3)
 
 
 output_data$size_Z[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])
@@ -1168,7 +1178,7 @@ output_data$size_RP_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]
 
 # fit abund model
 
-fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
+fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3, cores=3)
 
 
 print(fit_abund, probs=c(0.025, 0.5, 0.975))
@@ -1413,7 +1423,7 @@ data_for_NASS <-
 
 
 # Now fit stan model
-fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3)
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3, cores=3)
 
 output_data$size_Z[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])
 
@@ -1733,7 +1743,7 @@ data_for_NASS <-
 
 
 # Now fit stan model
-fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3)
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3, cores=3)
 
 output_data$size_Z[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])
 
@@ -1760,7 +1770,7 @@ output_data$size_RP_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]
 
 # fit abund model
 
-fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3)
+fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3, cores=3)
 
 
 print(fit_abund, probs=c(0.025, 0.5, 0.975))
