@@ -288,7 +288,7 @@ nls_data <- list(age = age_data$age_bin,
     size_ind = age_data$size_bin)
 
 
-start <- list(W0 = 0.01 , g = 0.5)  ### setting start parameters from above
+start <- list(W0 = 0.01 , g = 0.4)  ### setting start parameters from above
 
 power <- size_ind ~ W0 * exp(age*g)  ### Growth equation
 
