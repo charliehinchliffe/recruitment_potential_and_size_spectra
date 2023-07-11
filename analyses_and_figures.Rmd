@@ -150,7 +150,7 @@ output_data$ratio[i] <- as.numeric(bio_data[1,2]/bio_data[2,2])
 
 output_data
 
-saveRDS(output_data, "outputs/simulations_biomass_ratio_age15toage5.rds")
+#saveRDS(output_data, "outputs/simulations_biomass_ratio_age15toage5.rds")
 ```
 
 Plot
@@ -330,7 +330,7 @@ output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
 
 output_data
 
-saveRDS(output_data, "outputs/simulations_runif_z_g.rds")
+#saveRDS(output_data, "outputs/simulations_runif_z_g.rds")
 ```
 
 Plot output
@@ -721,7 +721,7 @@ output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
 
 output_data
 
-saveRDS(output_data, "outputs/simulations_R_variation.rds")
+#saveRDS(output_data, "outputs/simulations_R_variation.rds")
 ```
 
 Read output 
@@ -968,7 +968,7 @@ output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
 
 output_data
 
-saveRDS(output_data, "outputs/simulations_Z_variation.rds")
+#saveRDS(output_data, "outputs/simulations_Z_variation.rds")
 ```
 
 Read output
@@ -1073,11 +1073,11 @@ Z_plot <- ggplot(data, aes(x = model, y = estimate, fill = model, group = model)
 ```{r}
 N_iter = 500
 
-variance <- c(rep(0, times = N_iter),
-              rep(0.005, times = N_iter),
-              rep(0.01, times = N_iter),
-              rep(0.02, times = N_iter),
-              rep(0.03, times = N_iter),
+variance <- c(#rep(0, times = N_iter),
+              #rep(0.005, times = N_iter),
+              #rep(0.01, times = N_iter),
+              #rep(0.02, times = N_iter),
+              #rep(0.03, times = N_iter),
               rep(0.05, times = N_iter),
               rep(0.1, times = N_iter)
               )
@@ -1228,13 +1228,14 @@ output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
 
 output_data
 
-saveRDS(output_data, "outputs/simulations_g_variation.rds")
+saveRDS(output_data, "outputs/simulations_g_variation_ReRun.rds")
+#saveRDS(output_data, "outputs/simulations_g_variation.rds")
 ```
 
 ### Read output
 
 ```{r}
-output_data <- readRDS("outputs/simulations_g_variation.rds")
+output_data <- readRDS("outputs/simulations_g_variation_ReRun.rds")
 ```
 
 Make long format data
@@ -1530,7 +1531,7 @@ output_data$crcb_MG[i] <- NA
 
 output_data
 
-saveRDS(output_data, "outputs/simulations_Age_variation.rds")
+#saveRDS(output_data, "outputs/simulations_Age_variation.rds")
 ```
 
 
@@ -1847,7 +1848,7 @@ output_data$crcb_MG[i] <- NA
 
 output_data
 
-saveRDS(output_data, "outputs/simulations_size_measurement_error.rds")
+#saveRDS(output_data, "outputs/simulations_size_measurement_error.rds")
 ```
 
 Make long format data
