@@ -12,7 +12,8 @@ library(tidyverse)
 library(vegan)
 library(see)
 library(patchwork)
-
+# install.packages("remotes")
+#remotes::install_github("traitecoevo/sizedist", ref = "master", build_vignettes = TRUE)
 library(sizedist)
 library(rstan)
 
@@ -344,10 +345,14 @@ output_data2 <- output_data #%>% subset(t < 107)
 
 output_data2$RP <- output_data2$z/output_data2$g
 output_data2$logRP <- log(output_data2$RP)
-output_data2$abund_RP <- (output_data2$mean_b)-1
+output_data2$abund_RP <- (output_data2$median_b)-1
 
 output_data2 <- output_data2 %>% 
-  select("t", "z", "g", "RP", "logRP", "size_Z", "size_g",  "size_RP",  "abund_RP", "LM_MG", "LM_M", "LM_G", "wlr_M", "wlr_MG", "crcb_M", "crcb_MG")
+  select("t", "z", "g", "RP", "logRP", "size_Z_median", "size_g_median",  "size_RP_median",  "abund_RP", "LM_MG", "LM_M", "LM_G", "wlr_M", "wlr_MG", "crcb_M", "crcb_MG") %>% 
+  rename(size_Z = size_Z_median,
+         size_g = size_g_median,
+         size_RP = size_RP_median,
+         ) #taking median sizedist estimate instead on mean
 
 output_data2$set_z <- output_data2$z
 output_data2$set_g <- output_data2$g
@@ -733,9 +738,12 @@ Make long format data
 ```{r}
 output_data2 <- output_data
 
-output_data2$abund_RP <- (output_data2$mean_b)-1
+output_data2$abund_RP <- (output_data2$median_b)-1
 
-data_plotting <- output_data2 %>% select(hatches_per_day, size_RP, abund_RP, LM_MG, wlr_MG, crcb_MG)
+data_plotting <- output_data2 %>% select(hatches_per_day, size_RP_median, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% 
+  rename(
+         size_RP = size_RP_median
+         ) #taking median sizedist estimate instead on mean
 
 keycol <- "model"
 valuecol <- "estimate"
@@ -982,9 +990,11 @@ Make long format data
 output_data2 <- output_data %>% 
   subset(variance != 0.005)
 
-output_data2$abund_RP <- (output_data2$mean_b)-1
+output_data2$abund_RP <- (output_data2$median_b)-1
 
-data_plotting <- output_data2 %>% select(variance, size_RP, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% rename(z_var = variance)
+data_plotting <- output_data2 %>% select(variance, size_RP_median, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% rename(z_var = variance,
+        size_RP = size_RP_median
+         ) #taking median sizedist estimate instead on mean
 
 keycol <- "model"
 valuecol <- "estimate"
@@ -1235,17 +1245,32 @@ saveRDS(output_data, "outputs/simulations_g_variation_ReRun.rds")
 ### Read output
 
 ```{r}
-output_data <- readRDS("outputs/simulations_g_variation_ReRun.rds")
+output_data <- readRDS("outputs/simulations_g_variation.rds")
+output_data <- output_data %>% 
+  subset(variance != 0.1) %>% 
+  subset(variance != 0.05)
+tail(output_data)
+
+output_data2 <- readRDS("outputs/simulations_g_variation_ReRun.rds")
+
+output_data2 <- output_data2 %>% 
+  subset(variance != 0) %>% 
+  subset(variance != 0.005) %>% 
+  subset(variance != 0.01) %>% 
+  subset(variance != 0.02) %>% 
+  subset(variance != 0.03)
+tail(output_data2)
 ```
 
 Make long format data
 ```{r}
-output_data2 <- output_data %>% 
-  subset(variance != 0.005)
+output_data2 <- rbind(output_data, output_data2)
 
-output_data2$abund_RP <- (output_data2$mean_b)-1
+output_data2$abund_RP <- (output_data2$median_b)-1
 
-data_plotting <- output_data2 %>% select(variance, size_RP, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% rename(g_var = variance)
+data_plotting <- output_data2 %>% select(variance, size_RP_median, abund_RP, LM_MG, wlr_MG, crcb_MG) %>%
+  rename(g_var = variance,
+        size_RP = size_RP_median)
 
 keycol <- "model"
 valuecol <- "estimate"
@@ -1254,6 +1279,7 @@ gathercols <- c("size_RP", "abund_RP", "LM_MG", "wlr_MG", "crcb_MG")
 data_long <- gather_(data_plotting, keycol, valuecol, gathercols)
 
 data <- data_long %>% mutate(model = factor(model, levels=c("abund_RP","size_RP", "LM_MG", "wlr_MG", "crcb_MG")))
+
 ```
 
 Summary table
@@ -1336,7 +1362,7 @@ Fig_4
 # Section 4: measurment error
 This code produces the analysis of measurement error and Fig 5.
 
-Aging error
+## Aging error
 
 ```{r}
 
@@ -1543,9 +1569,9 @@ output_data <- readRDS("outputs/simulations_Age_variation.rds")
 
 output_data2 <- output_data
 
-output_data2$abund_RP <- (output_data2$mean_b)-1
+output_data2$abund_RP <- (output_data2$median_b)-1
 
-data_plotting <- output_data2 %>% select(variance, size_RP, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% rename(age_var = variance)
+data_plotting <- output_data2 %>% select(variance, size_RP_median, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% rename(age_var = variance,                                                                                            size_RP = size_RP_median)
 
 keycol <- "model"
 valuecol <- "estimate"
@@ -1649,7 +1675,7 @@ age_sum %>%
   
 ```
 
-Size error
+## Size error
               
 ```{r}
 N_iter = 500
@@ -1858,9 +1884,10 @@ output_data <- readRDS("outputs/simulations_size_measurement_error.rds")
 
 output_data2 <- output_data
 
-output_data2$abund_RP <- (output_data2$mean_b)-1
+output_data2$abund_RP <- (output_data2$median_b)-1
 
-data_plotting <- output_data2 %>% select(variance, size_RP, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% rename(size_var = variance)
+data_plotting <- output_data2 %>% select(variance, size_RP_median, abund_RP, LM_MG, wlr_MG, crcb_MG) %>% rename(size_var = variance,
+        size_RP = size_RP_median)
 
 keycol <- "model"
 valuecol <- "estimate"
@@ -1970,10 +1997,215 @@ size_sum %>%
   arrange(Model) 
 ```
 
-### Fig. 5: measurement error
+## Fig. 5: measurement error
 
 ```{r}
 Fig_5 <- age_var_plot / size_var_plot
 Fig_5
+```
+
+
+### Size error with expanded binwidth.
+
+
+              
+```{r}
+N_iter = 500
+
+variance <- c(rep(0, times = N_iter),
+              rep(0.001, times = N_iter),
+              rep(0.005, times = N_iter),
+              rep(0.01, times = N_iter),
+              rep(0.05, times = N_iter),
+              rep(0.1, times = N_iter)
+              )
+
+output_data <- as.data.frame(variance)
+
+
+tryCatch(
+for(i in seq_len(nrow(output_data))){
+  
+#generate data  
+data <- simulate_catch_data(R = 500,
+                            s0_av = 0.1,
+                            log10s0_sd = 0,
+                            g_av = 0.21,
+                            log10g_sd = 0,
+                            z_av = 0.21, 
+                            log10z_sd = 0,
+                            growth_in_weight = TRUE)
+
+data <- data %>% 
+  subset(size_sampled != "Inf") %>% 
+  subset(size_sampled <= 50)
+
+
+size_var = output_data$variance[i]
+
+data <- data %>% 
+  mutate(size_sampled = rnorm(length(size_sampled), mean = size_sampled, sd = size_var)) %>% 
+  subset(size_sampled >= 0)
+
+data_binned <- create_size_data_bins(data = data,
+                                   bin_width_size = 0.1)
+
+
+size_data <- summarise_bin_counts(data_binned,
+                                  size_sampled,
+                                  0.1)
+
+#cut at the top of the descending limb
+modal_size <- size_data$binned_var[which.max(size_data$counts)]
+
+size_data <- size_data %>% 
+  subset(binned_var >= modal_size)
+
+# select fish for aging
+
+data2 <- create_bins(data_binned,
+                     bin_width_age = 1,
+                     bin_width_size = 0.1)
+
+age_data <- sample_n(data2, size = nrow(data2)*0.3)
+ 
+#format for stan models
+
+data_for_stan_size_growth <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data),
+
+   
+    # data for length age estimates
+    N_growth = nrow(age_data),
+    age = age_data$age_bin,
+    size_ind = age_data$size_bin
+  )
+
+data_for_NASS <- 
+  list(# data for counts
+    size_lower = size_data$bin_lower,
+    size_upper = size_data$bin_upper,
+    counts = size_data$counts,
+    N_counts = nrow(size_data)
+  )
+
+
+# Now fit stan model
+fit_size <- sampling(ret_size, data= data_for_stan_size_growth, iter = 999, chains = 3, cores = 3)
+
+output_data$size_Z[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g[i] <- mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0[i] <- mean(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R[i] <- mean(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP[i] <- mean(rstan::extract(fit_size, pars="Z")[["Z"]])/mean(rstan::extract(fit_size, pars="g")[["g"]])
+
+
+#medians
+
+output_data$size_Z_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])
+
+output_data$size_g_median[i] <- median(rstan::extract(fit_size, pars="g")[["g"]])
+
+output_data$size_W0_median[i] <- median(rstan::extract(fit_size, pars="W0")[["W0"]])
+
+output_data$size_R_median[i] <- median(rstan::extract(fit_size, pars="R")[["R"]])
+
+output_data$size_RP_median[i] <- median(rstan::extract(fit_size, pars="Z")[["Z"]])/median(rstan::extract(fit_size, pars="g")[["g"]])
+
+# fit abund model
+
+fit_abund <- sampling(ret_abund, data = data_for_NASS, iter = 999, chains = 3, cores = 3)
+
+
+print(fit_abund, probs=c(0.025, 0.5, 0.975))
+
+output_data$mean_a[i] <- mean(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$mean_b[i] <- mean(rstan::extract(fit_abund, pars="b")[["b"]])
+
+    #medians
+output_data$median_a[i] <- median(rstan::extract(fit_abund, pars="a")[["a"]])
+output_data$median_b[i] <- median(rstan::extract(fit_abund, pars="b")[["b"]])
+
+# fit Catch curve and nls
+nls_data <- list(age = age_data$age_bin,
+    size_ind = age_data$size_bin)
+
+
+start <- list(W0 = 0.01 , g = 0.5)  ### setting start parameters from above
+
+power <- size_ind ~ W0 * exp(age*g)  ### Growth equation
+
+
+#nls
+fit <- tryCatch({nls(power, data = nls_data, start = start, control = list(maxiter = 1000, minFactor = 0), trace = TRUE)
+    }, error=function(e){
+      x = c(0,1,2,3)
+      y = c(-1,0,1,2)
+      lm(y~x)
+    }) # create coeff(fit)[1] == -1 when error
+
+
+
+
+modal_age <-  getmode(round(data_binned$age,0))
+
+catch_dat <- data_binned %>% 
+  count(age_day = round(age, 0)) %>% 
+  subset(age_day >= modal_age)
+
+
+catch2 <- lm(log(n) ~ age_day, data = catch_dat)
+
+
+output_data$LM_M[i] <- -as.numeric(coef(catch2)[2])
+output_data$LM_G[i] <- as.numeric(coef(fit)[2])
+output_data$LM_MG[i] <- output_data$LM_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+wlr <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "wlr")
+
+output_data$wlr_M[i] <- as.numeric(wlr$`results`[3])
+output_data$wlr_MG[i] <- output_data$wlr_M[i]/output_data$LM_G[i]
+
+#fit weighted catch curve
+crcb <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "crcb")
+
+output_data$crcb_M[i] <- as.numeric(crcb$`results`[3])
+output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
+
+### dealing with error in nls
+
+if (coef(fit)[1] == -1) {
+output_data$LM_M[i] <- -as.numeric(coef(catch2)[2])
+output_data$LM_G[i] <- NA
+output_data$LM_MG[i] <- NA
+
+#fit weighted catch curve
+wlr <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "wlr")
+
+output_data$wlr_M[i] <- as.numeric(wlr$`results`[3])
+output_data$wlr_MG[i] <- NA
+
+#fit weighted catch curve
+crcb <- agesurv2(age = data2$age_bin, full = modal_age, estimate = "z", method = "crcb")
+
+output_data$crcb_M[i] <- as.numeric(crcb$`results`[3])
+output_data$crcb_MG[i] <- NA
+}
+
+}, error=function(e) e
+)
+
+output_data
+
+saveRDS(output_data, "outputs/simulations_size_measurement_error_ExpandedBinwidth.rds")
 ```
 
