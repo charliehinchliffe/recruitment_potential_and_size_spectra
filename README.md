@@ -16,4 +16,4 @@ There are 3 major analyses within the manuscript. The first investigates the ski
 
 All analyses were done in `R`. All data and code needed to reproduce the submitted products is included in this repository. 
 
-The paper was written in 2021-2022 using a version of R available at the time (R version 4.2.1). You can try running it on your current version and it may work. 
+The paper was written in 2021-2022 using a version of R available at the time (R version 4.3.1). You can try running it on your current version and it may work. 
