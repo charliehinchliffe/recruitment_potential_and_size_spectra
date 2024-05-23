@@ -98,7 +98,7 @@ ret_size <- stan_model(file="stan/simple_weight_model.stan")
 ret_abund <- stan_model(file="stan/abundance_slope.stan")
 ```
 
-# Section 1: Biomas trajectory - Fig 1.
+# Section 1: Biomas trajectory
 
 This code reproduced data and plots Fig. 1.
 ```{r, eval = TRUE}
@@ -167,7 +167,7 @@ Fig_1 <- ggplot(output_data, aes(RP, ratio)) +
   geom_point2(size = 2) +
   scale_x_log10() +
   scale_y_log10() +
-  ylab('SL10:SL6 Biomass Ratio') +
+  ylab('Age15:Age5 Biomass Ratio') +
   xlab(expression(bar(z)/bar(g))) + 
   geom_hline(yintercept = 1, color = "red", linewidth=0.5, alpha = 0.5) +
   geom_vline(xintercept = 1, color = "red", linewidth=0.5, alpha = 0.5) +
@@ -420,146 +420,8 @@ RP_data <- subset(data_long, data_long$metric == "Potential")
 ```
 
 
-### Fig. X: varying growth and mortality
-```{r}
+### Fig. 2
 
-
-growth_plot <- growth_data %>% ggplot(aes(t, estimate , col = method)) +
-  geom_point2(size = 3, alpha = 0.5) +
-  geom_smooth(method = "loess", span = 0.05, se = F, alpha = 0.7) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "none") +
-  xlab("Step") +
-  #ylab(bquote(~bar(g)~"(mg mg"^-1*" d"^-1*")")) +
-  ylab(bquote(bar(g))) +
-  ggtitle("A") +
-  scale_color_manual(values =  pal_1) 
-
-
-mort_plot <- mort_data %>% ggplot(aes(t, estimate , col = method)) +
-  geom_point2(size = 3, alpha = 0.5) +
-  geom_smooth(method = "loess", span = 0.05, se = F, alpha = 0.7) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = "none") +
-  xlab("Step") +
-  #ylab(bquote(~bar(z)~"(d"^-1*")")) +
-  ylab(bquote(bar(z))) +
-  ggtitle("B") +
-  scale_color_manual(values =  pal_2) 
-
-
-RP_plot <- RP_data %>% ggplot(aes(t, estimate , col = method)) +
-  geom_point2(size = 3, alpha = 0.5) +
-  geom_smooth(method = "loess", span = 0.05, se = F, alpha = 0.7) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "bottom") +
-  xlab("Step") +
-  ylab(expression(bar(z)/bar(g))) +
-  ggtitle("C") +
-  scale_color_manual(values =  pal_3) +
-  scale_y_log10() +
-  geom_hline(yintercept=1, linetype = "dashed", color = "black", size=0.5, alpha = 0.5) 
-
-
-
-Fig_X <- (growth_plot | mort_plot) / RP_plot
-
-Fig_X
-```
-
-
-corr plot
-```{r}
-
-growth_data2 <- growth_data %>%  subset(method != "Real")
-
-mort_data2 <- mort_data %>%  subset(method != "Real")
-
-RP_data2 <- RP_data %>%  subset(method != "Real")
-
-
-cor_growth_plot <- growth_data2 %>% ggplot(aes(set_g, estimate , col = method)) + 
-  geom_abline(intercept = 0, slope = 1, linetype="dashed")+
-  geom_point2(size = 3, alpha = 0.5) +
-  geom_smooth(method = "lm", se = F) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
-  ylab(bquote(bar(g))) +
-  xlab(bquote("Set "~bar(g)~"")) +
-  ggtitle("A") +
-  scale_color_manual(values =  pal_1_1)
-
-cor_mort_plot <- mort_data2 %>% ggplot(aes(set_z, estimate , col = method)) + 
-  geom_abline(intercept = 0, slope = 1, linetype="dashed") +
-  geom_point2(size = 3, alpha = 0.5) +
-  geom_smooth(method = "lm", se = F) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
-  ylab(expression(bar(z))) +
-  xlab(expression("Set "~bar(z)~"")) +
-  ggtitle("C") +
-  scale_color_manual(values =  pal_2_1)
-
-
-cor_RP_plot <- RP_data2 %>% ggplot(aes(set_RP, estimate , col = method)) + 
-  geom_abline(intercept = 0, slope = 1, linetype="dashed") +
-  geom_point2(size = 3, alpha = 0.5) +
-  geom_smooth(method = "lm", se = F) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
-  xlab(expression(~"Set "~bar(z)/bar(g))) +
-  ylab(expression(bar(z)/bar(g))) +
-  ggtitle("E") +
-  scale_color_manual(values =  pal_3_1) +
-  scale_x_log10() +
-  scale_y_log10()
-
-
-cor_growth_plot / cor_mort_plot / cor_RP_plot
-```
-
-### res plot
-```{r}
-res_growth_plot <- growth_data2 %>% ggplot(aes(set_g, estimate-set_g , col = method)) + 
-  geom_abline(intercept = 0, slope = 0, linetype="dashed")+
-  geom_point2(size = 3, alpha = 0.5) +
-  geom_smooth(method = "lm", se = F) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
-  ylab(bquote(~bar(g)~'-Set value')) +
-  xlab(bquote("Set "~bar(g)~"")) +
-  ggtitle("B") +
-  scale_color_manual(values =  pal_1_1)
-
-res_mort_plot <- mort_data2 %>% ggplot(aes(set_z, estimate-set_z , col = method)) + 
-  geom_abline(intercept = 0, slope = 0, linetype="dashed") +
-  geom_point2(size = 3, alpha = 0.5) +
-  geom_smooth(method = "lm", se = F) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
-  ylab(bquote(~bar(z)~'-Set value')) +
-  xlab(expression("Set "~bar(z)~"")) +
-  ggtitle("D") +
-  scale_color_manual(values =  pal_2_1)
-
-res_RP_plot <- RP_data2 %>% ggplot(aes(set_RP, estimate-set_RP , col = method)) + 
-  geom_abline(intercept = 0, slope = 0, linetype="dashed") +
-  geom_point2(size = 3, alpha = 0.5) +
-  geom_smooth(method = "lm", se = F) +
-  theme_bw() +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "bottom") +
-  xlab(expression(~"Set "~bar(z)/bar(g))) +
-  ylab(bquote(~bar(z)/bar(g)~'-Set value')) +
-  ggtitle("F") +
-  scale_color_manual(values =  pal_3_1) +
-  scale_x_log10()
-
-
-res_growth_plot / res_mort_plot / res_RP_plot
-```
-
-
-### res plot
 ```{r}
 rel_growth_plot <- growth_data2 %>% ggplot(aes(set_g, (estimate-set_g)/set_g)) + 
   geom_abline(intercept = 0, slope = 0, linetype="dashed")+
@@ -599,19 +461,10 @@ rel_RP_plot <- RP_data2 %>% ggplot(aes(set_RP, (estimate-set_RP)/set_RP)) +
   scale_x_log10()
 
 
-rel_growth_plot / rel_mort_plot / rel_RP_plot
+Fig_2 <- rel_growth_plot / rel_mort_plot / rel_RP_plot
 ```
 
-
-
-### Fig 2. Correlation plots
-```{r}
-Fig_2 <-(cor_growth_plot | res_growth_plot) / (cor_mort_plot | res_mort_plot) / (cor_RP_plot | res_RP_plot)
-
-
-Fig_2
-```
-
+Tables
 ```{r}
 mort_rmse_table <- mort_data %>% 
   group_by(model) %>%  
@@ -1344,7 +1197,6 @@ output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
 
 output_data
 
-#saveRDS(output_data, "outputs/simulations_g_variation_ReRun.rds")
 #saveRDS(output_data, "outputs/simulations_g_variation.rds")
 ```
 
@@ -1352,27 +1204,14 @@ output_data
 
 ```{r}
 output_data <- readRDS("outputs/simulations_g_variation.rds")
-output_data <- output_data %>% 
-  subset(variance != 0.1) %>% 
-  subset(variance != 0.05)
-tail(output_data)
-
-output_data2 <- readRDS("outputs/simulations_g_variation_ReRun.rds")
-
-output_data2 <- output_data2 %>% 
-  subset(variance != 0) %>% 
-  subset(variance != 0.005) %>% 
-  subset(variance != 0.01) %>% 
-  subset(variance != 0.02) %>% 
-  subset(variance != 0.03)
-tail(output_data2)
 ```
 
 Make long format data
 ```{r}
-output_data2 <- rbind(output_data, output_data2)
 
-output_data2$abund_RP <- (output_data2$median_b)-1
+output_data <- readRDS("outputs/simulations_g_variation.rds")
+
+output_data2$abund_RP <- (output_data$median_b)-1
 
 data_plotting <- output_data2 %>% select(variance, size_RP_median, abund_RP, LM_MG, wlr_MG, crcb_MG) %>%
   rename(g_var = variance,
@@ -1468,7 +1307,7 @@ g_plot
 ```
 
 
-## Fig.3: Plot Sensitivity
+## Fig. 3
 
 ```{r}
 Fig_3 <- R_plot / Z_plot / g_plot
