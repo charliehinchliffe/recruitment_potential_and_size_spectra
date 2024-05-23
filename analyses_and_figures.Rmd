@@ -155,6 +155,8 @@ output_data
 ```
 
 Plot
+## Fig 1.
+
 ```{r}
 output_data <- readRDS("outputs/simulations_biomass_ratio_age15toage5.rds")
 
@@ -165,7 +167,7 @@ Fig_1 <- ggplot(output_data, aes(RP, ratio)) +
   geom_point2(size = 2) +
   scale_x_log10() +
   scale_y_log10() +
-  ylab('Age15:Age5 Biomass Ratio') +
+  ylab('SL10:SL6 Biomass Ratio') +
   xlab(expression(bar(z)/bar(g))) + 
   geom_hline(yintercept = 1, color = "red", linewidth=0.5, alpha = 0.5) +
   geom_vline(xintercept = 1, color = "red", linewidth=0.5, alpha = 0.5) +
@@ -418,7 +420,7 @@ RP_data <- subset(data_long, data_long$metric == "Potential")
 ```
 
 
-### Fig. 2: varying growth and mortality
+### Fig. X: varying growth and mortality
 ```{r}
 
 
@@ -460,9 +462,9 @@ RP_plot <- RP_data %>% ggplot(aes(t, estimate , col = method)) +
 
 
 
-Fig_2 <- (growth_plot | mort_plot) / RP_plot
+Fig_X <- (growth_plot | mort_plot) / RP_plot
 
-Fig_2
+Fig_X
 ```
 
 
@@ -556,12 +558,97 @@ res_RP_plot <- RP_data2 %>% ggplot(aes(set_RP, estimate-set_RP , col = method)) 
 res_growth_plot / res_mort_plot / res_RP_plot
 ```
 
-### Fig 3. Correlation plots
+
+### res plot
 ```{r}
-Fig_3 <-(cor_growth_plot | res_growth_plot) / (cor_mort_plot | res_mort_plot) / (cor_RP_plot | res_RP_plot)
+rel_growth_plot <- growth_data2 %>% ggplot(aes(set_g, (estimate-set_g)/set_g)) + 
+  geom_abline(intercept = 0, slope = 0, linetype="dashed")+
+  geom_point2(alpha = 0.5, size = 1) +
+  geom_smooth(method = "lm", se = T, col = "black") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
+  ylab("Relative Error") +
+  xlab(bquote("True "~bar(g)~"")) +
+  facet_wrap(~method, nrow = 1) +
+  ggtitle("A") #+
+  #scale_color_manual(values =  pal_1_1)
+
+rel_mort_plot <- mort_data2 %>% ggplot(aes(set_z, (estimate-set_z)/set_z)) + 
+  geom_abline(intercept = 0, slope = 0, linetype="dashed") +
+  geom_point2(alpha = 0.5, size = 1) +
+  geom_smooth(method = "lm", se = T, col = "black") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none") +
+  ylab("Relative Error") +
+  xlab(expression("True "~bar(z)~"")) +
+  facet_wrap(~method, nrow = 1) +
+  ggtitle("B") #+
+  #scale_color_manual(values =  pal_2_1)
+
+rel_RP_plot <- RP_data2 %>% ggplot(aes(set_RP, (estimate-set_RP)/set_RP)) + 
+  geom_abline(intercept = 0, slope = 0, linetype="dashed") +
+  geom_point2(alpha = 0.5, size = 1) +
+  geom_smooth(method = "lm", se = T, col = "black") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "bottom") +
+  xlab(expression(~"True "~bar(z)/bar(g))) +
+  ylab("Relative Error") +
+  facet_wrap(~method, nrow = 1) +
+  ggtitle("C") +
+  #scale_color_manual(values =  pal_3_1) +
+  scale_x_log10()
 
 
-Fig_3
+rel_growth_plot / rel_mort_plot / rel_RP_plot
+```
+
+
+
+### Fig 2. Correlation plots
+```{r}
+Fig_2 <-(cor_growth_plot | res_growth_plot) / (cor_mort_plot | res_mort_plot) / (cor_RP_plot | res_RP_plot)
+
+
+Fig_2
+```
+
+```{r}
+mort_rmse_table <- mort_data %>% 
+  group_by(model) %>%  
+  summarise(Model = method,
+            n = n(),
+         rm2e = RMSE(estimate, set_z)
+         ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  arrange(Model) %>% select(Model, rm2e)
+
+mort_rmse_table 
+
+growth_rmse_table <- growth_data %>% 
+  group_by(model) %>%  
+  summarise(Model = method,
+            n = n(),
+         rm2e = RMSE(estimate, set_g)
+         ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  arrange(Model) %>% select(Model, rm2e)
+
+growth_rmse_table 
+
+
+RP_rmse_table <- RP_data %>% 
+  group_by(model) %>%  
+  summarise(Model = method,
+            n = n(),
+         rm2e = RMSE(estimate, set_z/set_g)
+         ) %>% 
+  distinct() %>% 
+  as.data.frame() %>% 
+  arrange(Model) %>% select(Model, rm2e)
+
+RP_rmse_table 
 ```
 
 
@@ -779,7 +866,16 @@ summary_table <- data %>%
   arrange(Model)
 
 
-summary_table #%>% subset(R >= 100)
+summary_table %>% subset(R <= 50)
+
+R_whole <- summary_table %>%
+  #subset(Variance < 0.1) %>% 
+  mutate(mean = round(mean,3),
+         sd = round(sd,3),
+         rm2e = round(rm2e,3)) %>% 
+  select(Model, R, mean, sd, rm2e)
+
+write.csv(R_whole, "outputs/R_sensitivity.csv")
 
 R_sum <- summary_table %>% 
   group_by(Model)%>%
@@ -1027,6 +1123,16 @@ summary_table <- data %>%
   arrange(Variance) %>% 
   arrange(Model)
 
+summary_table %>% subset(Variance < 0.1)
+
+Z_whole <- summary_table %>%
+  #subset(Variance < 0.1) %>% 
+  mutate(mean = round(mean,3),
+         sd = round(sd,3),
+         rm2e = round(rm2e,3)) %>% 
+  select(Model, Variance, mean, sd, rm2e)
+
+write.csv(Z_whole, "outputs/Z_var_sensitivity.csv")
 
 s <- summary_table %>% subset(Variance == 0.1)
 s
@@ -1238,7 +1344,7 @@ output_data$crcb_MG[i] <- output_data$crcb_M[i]/output_data$LM_G[i]
 
 output_data
 
-saveRDS(output_data, "outputs/simulations_g_variation_ReRun.rds")
+#saveRDS(output_data, "outputs/simulations_g_variation_ReRun.rds")
 #saveRDS(output_data, "outputs/simulations_g_variation.rds")
 ```
 
@@ -1306,9 +1412,20 @@ summary_table <- data %>%
 
 summary_table
 
+g_whole <- summary_table %>%
+  #subset(Variance < 0.1) %>% 
+  mutate(mean = round(mean,3),
+         sd = round(sd,3),
+         rm2e = round(rm2e,3)) %>% 
+  select(Model, Variance, mean, sd, rm2e)
+
+write.csv(g_whole, "outputs/g_var_sensitivity.csv")
 
 #s <- summary_table %>% subset(Model == "abund_RP" | Model == "size_RP")
-s <- summary_table %>% subset(Model == "LM_MG" | Model == "wlr_MG" | Model == "crcb_MG")
+s <- summary_table %>% subset(Model == "LM_MG" | Model == "wlr_MG" | Model == "crcb_MG") %>% 
+  subset(Variance >= 0.03)
+
+s
 
 range(s$mean)
 range(s$sd)
@@ -1351,12 +1468,12 @@ g_plot
 ```
 
 
-## Fig.4: Plot Sensitivity
+## Fig.3: Plot Sensitivity
 
 ```{r}
-Fig_4 <- R_plot / Z_plot / g_plot
+Fig_3 <- R_plot / Z_plot / g_plot
 
-Fig_4
+Fig_3
 ```
 
 # Section 4: measurment error
@@ -1620,6 +1737,15 @@ summary_table <- data %>%
   arrange(Model)
 
 summary_table
+
+age_whole <- summary_table %>%
+  #subset(Variance < 0.1) %>% 
+  mutate(mean = round(mean,3),
+         sd = round(sd,3),
+         rm2e = round(rm2e,3)) %>% 
+  select(Model, Variance, mean, sd, rm2e)
+
+write.csv(age_whole, "outputs/age_var_sensitivity.csv")
 
 
 s1 <- summary_table %>% subset(Model == "abund_RP")
@@ -1937,6 +2063,14 @@ summary_table <- data %>%
 
 summary_table
 
+size_whole <- summary_table %>%
+  #subset(Variance < 0.1) %>% 
+  mutate(mean = round(mean,3),
+         sd = round(sd,3),
+         rm2e = round(rm2e,3)) %>% 
+  select(Model, Variance, mean, sd, rm2e)
+
+write.csv(size_whole, "outputs/size_var_sensitivity.csv")
 
 s1 <- summary_table %>% subset(Model == "abund_RP") %>%  mutate(mean = round(mean,3)) %>%  mutate(sd = round(sd,3))
 
@@ -1997,11 +2131,11 @@ size_sum %>%
   arrange(Model) 
 ```
 
-## Fig. 5: measurement error
+## Fig. 4: measurement error
 
 ```{r}
-Fig_5 <- age_var_plot / size_var_plot
-Fig_5
+Fig_4 <- age_var_plot / size_var_plot
+Fig_4
 ```
 
 
