@@ -158,7 +158,7 @@ Plot
 ## Fig 1.
 
 ```{r}
-output_data <- readRDS("outputs/simulations_biomass_ratio_age15toage5.rds")
+output_data <- readRDS("outputs/simulations_biomass_ratio_age15toage5_final.rds")
 
 output_data <- output_data %>% 
   subset(!is.na(ratio))
@@ -167,7 +167,7 @@ Fig_1 <- ggplot(output_data, aes(RP, ratio)) +
   geom_point2(size = 2) +
   scale_x_log10() +
   scale_y_log10() +
-  ylab('Age15:Age5 Biomass Ratio') +
+  ylab('SL10:SL6 Biomass Ratio') +
   xlab(expression(bar(z)/bar(g))) + 
   geom_hline(yintercept = 1, color = "red", linewidth=0.5, alpha = 0.5) +
   geom_vline(xintercept = 1, color = "red", linewidth=0.5, alpha = 0.5) +
@@ -339,7 +339,7 @@ output_data
 Plot output
 
 ```{r}
-output_data <- readRDS("outputs/simulations_runif_z_g.rds")
+output_data <- readRDS("outputs/simulations_runif_z_g_final.rds")
 
 output_data2 <- output_data #%>% subset(t < 107)
 
@@ -462,6 +462,7 @@ rel_RP_plot <- RP_data2 %>% ggplot(aes(set_RP, (estimate-set_RP)/set_RP)) +
 
 
 Fig_2 <- rel_growth_plot / rel_mort_plot / rel_RP_plot
+Fig_2
 ```
 
 Tables
@@ -671,7 +672,7 @@ output_data
 
 Read output 
 ```{r}
-output_data <- readRDS("outputs/simulations_R_variation.rds")
+output_data <- readRDS("outputs/simulations_R_variation_final.rds")
 ```
 
 Make long format data
@@ -931,7 +932,7 @@ output_data
 Read output
 
 ```{r}
-output_data <- readRDS("outputs/simulations_Z_variation.rds")
+output_data <- readRDS("outputs/simulations_Z_variation_final.rds")
 ```
 
 Make long format data
@@ -1203,13 +1204,13 @@ output_data
 ### Read output
 
 ```{r}
-output_data <- readRDS("outputs/simulations_g_variation.rds")
+output_data <- readRDS("outputs/simulations_g_variation_final.rds")
 ```
 
 Make long format data
 ```{r}
 
-output_data <- readRDS("outputs/simulations_g_variation.rds")
+output_data2 <- readRDS("outputs/simulations_g_variation_final.rds")
 
 output_data2$abund_RP <- (output_data$median_b)-1
 
@@ -1520,7 +1521,7 @@ output_data
 Make long format data
 
 ```{r}
-output_data <- readRDS("outputs/simulations_Age_variation.rds")
+output_data <- readRDS("outputs/simulations_Age_variation_final.rds")
 
 output_data2 <- output_data
 
@@ -1843,7 +1844,7 @@ output_data
 
 Make long format data
 ```{r}
-output_data <- readRDS("outputs/simulations_size_measurement_error.rds")
+output_data <- readRDS("outputs/simulations_size_measurement_error_final.rds")
 
 output_data2 <- output_data
 
