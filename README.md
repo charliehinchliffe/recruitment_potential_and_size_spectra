@@ -3,8 +3,8 @@ This repository contains all the data and code used in the manuscript:
 
 * Title: "Rapid inference of larval fish recruitment potential from size spectrum models"
 * Authors: Charles Hinchliffe, Hayden T. Schilling, Pierre Pepin, Fonti Kar, Daniel S. Falster, Iain M. Suthers
-* Year of publication: XXX
-* Journal: XXX
+* Year of publication: 2024
+* Journal: Canadian Journal of Fisheries and Aquatic Sciences
 * doi: XXX
 
 
