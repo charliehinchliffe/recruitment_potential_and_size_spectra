@@ -5,7 +5,7 @@ This repository contains all the data and code used in the manuscript:
 * Authors: Charles Hinchliffe, Hayden T. Schilling, Pierre Pepin, Fonti Kar, Daniel S. Falster, Iain M. Suthers
 * Year of publication: 2024
 * Journal: Canadian Journal of Fisheries and Aquatic Sciences
-* doi: XXX
+* doi: [XXX](https://doi.org/10.1139/cjfas-2024-0067)
 
 
 The script `analyses_and_figures.rmd` contains code to reproduce the analysis and figures, from the paper. The output from the analyses is saved in `outputs/` and can be imported and observed directly when running `analyses_and_figures.Rmd`.
